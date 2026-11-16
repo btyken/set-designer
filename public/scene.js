@@ -86,6 +86,10 @@ export class SetScene {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.03;
+    // On touch screens an up/down swipe scrolls the page; a sideways swipe turns the set.
+    if (matchMedia('(pointer: coarse)').matches) canvas.style.touchAction = 'pan-y';
+    this.onScreen = true;
+    new IntersectionObserver(([entry]) => { this.onScreen = entry.isIntersecting; }).observe(canvas);
     this.group = new THREE.Group();
     this.scene.add(this.group);
     this.textures = new Map();
@@ -101,7 +105,7 @@ export class SetScene {
     this.resize();
     const tick = () => {
       this.raf = requestAnimationFrame(tick);
-      if (!canvas.clientWidth || this.busy) return;
+      if (!canvas.clientWidth || this.busy || !this.onScreen || document.hidden) return;
       this.controls.update();
       this.face(this.camera);
       this.renderer.render(this.scene, this.camera);
@@ -273,6 +277,7 @@ export class SetScene {
   }
 
   addLabel(sprite, height) {
+    if (window.innerWidth < 640) height *= 1.3; // keep names readable on a phone
     sprite.scale.set(height * sprite.userData.aspect, height, 1);
     this.group.add(sprite);
     this.labels.push(sprite);

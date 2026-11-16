@@ -73,11 +73,9 @@ export async function openMeasure(file) {
   canvas.width = src.width;
   canvas.height = src.height;
 
-  const st = { mode: 'ref', pts: [], box: null, drag: null };
-  $('mName').value = '';
-  $('mDepth').value = '';
-  $('mHero').checked = false;
+  const st = { mode: 'ref', pts: [], box: null, drag: null, loupe: null };
   overlay.hidden = false;
+  document.documentElement.classList.add('locked');
 
   const refLength = () => {
     const v = $('mRef').value;
@@ -101,6 +99,7 @@ export async function openMeasure(file) {
 
   function fit() {
     const r = stage.getBoundingClientRect();
+    if (!r.width || !r.height) return;
     const s = Math.min(r.width / src.width, r.height / src.height);
     canvas.style.width = `${Math.floor(src.width * s)}px`;
     canvas.style.height = `${Math.floor(src.height * s)}px`;
@@ -122,6 +121,40 @@ export async function openMeasure(file) {
     ctx.fillText(text, lx + 6 * u, ly + h / 2);
   }
 
+  // Magnified view of what is under the finger, drawn in a top corner away from it.
+  function loupe(p) {
+    const u = unit();
+    const shown = canvas.getBoundingClientRect().width;
+    const R = Math.min(64, shown * 0.2) * u;
+    const zoom = 2.4;
+    const half = R / zoom;
+    const onLeft = !(p.x < canvas.width / 2 && p.y < R * 2 + 30 * u);
+    const cx = onLeft ? R + 10 * u : canvas.width - R - 10 * u;
+    const cy = R + 10 * u;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = '#14110f';
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(src, p.x - half, p.y - half, half * 2, half * 2, cx - R, cy - R, R * 2, R * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 1.5 * u;
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy); ctx.lineTo(cx - 6 * u, cy);
+    ctx.moveTo(cx + 6 * u, cy); ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - 6 * u);
+    ctx.moveTo(cx, cy + 6 * u); ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3 * u;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   function draw() {
     const u = unit();
     ctx.drawImage(src, 0, 0);
@@ -135,31 +168,45 @@ export async function openMeasure(file) {
       ctx.strokeStyle = '#7ee0c3';
       ctx.lineWidth = 2.5 * u;
       ctx.strokeRect(b.x, b.y, b.w, b.h);
+      if (st.mode === 'box') {
+        for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
+          ctx.fillStyle = '#7ee0c3';
+          ctx.beginPath();
+          ctx.arc(x, y, 9 * u, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#14110f';
+          ctx.lineWidth = 2 * u;
+          ctx.stroke();
+        }
+      }
       const sz = size();
-      if (sz) label(`${sz.w} × ${sz.h} cm`, b.x + b.w / 2, b.y - 16 * u, '#7ee0c3');
+      if (sz) label(`${sz.w} × ${sz.h} cm`, b.x + b.w / 2, b.y + b.h + 22 * u, '#7ee0c3');
     }
     if (st.pts.length) {
       ctx.strokeStyle = '#ffc857';
-      ctx.fillStyle = '#ffc857';
       ctx.lineWidth = 3 * u;
       if (st.pts.length === 2) {
         ctx.beginPath();
         ctx.moveTo(st.pts[0].x, st.pts[0].y);
         ctx.lineTo(st.pts[1].x, st.pts[1].y);
         ctx.stroke();
-        label(`${refLength()} cm`, (st.pts[0].x + st.pts[1].x) / 2, (st.pts[0].y + st.pts[1].y) / 2 - 18 * u, '#ffc857');
+        if (!st.drag) label(`${refLength()} cm`, (st.pts[0].x + st.pts[1].x) / 2, (st.pts[0].y + st.pts[1].y) / 2 - 18 * u, '#ffc857');
       }
       for (const p of st.pts) {
-        ctx.fillStyle = '#ffc857';
+        ctx.fillStyle = st.mode === 'ref' ? 'rgba(255,200,87,0.35)' : '#ffc857';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 9 * u, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, (st.mode === 'ref' ? 13 : 6) * u, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#14110f';
+        ctx.strokeStyle = '#ffc857';
         ctx.lineWidth = 2 * u;
         ctx.stroke();
-        ctx.strokeStyle = '#ffc857';
+        ctx.fillStyle = '#14110f';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2 * u, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
+    if (st.loupe) loupe(st.loupe);
     updateUi();
   }
 
@@ -169,15 +216,17 @@ export async function openMeasure(file) {
     $('mRefCustom').hidden = $('mRef').value !== 'custom';
     const sz = size();
     $('mSave').disabled = !sz;
+    $('mSave').textContent = sz ? `Save item · ${sz.w} × ${sz.h} cm` : 'Save item';
+    $('mReset').disabled = !st.pts.length && !st.box;
     $('mHint').textContent = st.mode === 'ref'
-      ? st.pts.length < 2
-        ? 'Step 1: tap the two ends of the long edge of the card. Drag a dot to adjust.'
-        : 'Reference set. Now choose "Box the item".'
+      ? st.pts.length === 0 ? 'Touch one end of the card’s long edge. Slide your finger to place the dot exactly.'
+        : st.pts.length === 1 ? 'Now touch the other end of the same edge.'
+          : 'Card marked. Drag a dot to adjust, or go to 2 Item.'
       : sz
-        ? `Measured ${sz.w} cm wide × ${sz.h} cm tall. Redraw the box to adjust.`
+        ? 'Drag a corner to tighten the box, or drag inside it to move it.'
         : st.pts.length < 2
-          ? 'Mark the reference first so the size can be worked out.'
-          : 'Step 2: drag a box tightly around the item.';
+          ? 'Mark the card first (1 Card) so the size can be worked out.'
+          : 'Drag a box around the item, from one corner to the opposite corner.';
   }
 
   const pos = (e) => {
@@ -187,13 +236,17 @@ export async function openMeasure(file) {
       y: Math.min(Math.max((e.clientY - r.top) * (canvas.height / r.height), 0), canvas.height),
     };
   };
+  const GRAB = 34; // screen px: how close a touch must be to grab a dot or corner
 
   function down(e) {
+    if (st.drag) return; // ignore a second finger
     e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
     const p = pos(e);
+    const grab = GRAB * unit();
+    st.loupe = p;
     if (st.mode === 'ref') {
-      const near = st.pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < 28 * unit());
+      const near = st.pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < grab);
       if (near >= 0) st.drag = { pt: near };
       else if (st.pts.length < 2) {
         st.pts.push(p);
@@ -203,24 +256,50 @@ export async function openMeasure(file) {
         st.drag = { pt: 0 };
       }
     } else {
-      st.box = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
-      st.drag = { box: true };
+      const b = boxRect();
+      const corner = b && [['x0', 'y0'], ['x1', 'y0'], ['x0', 'y1'], ['x1', 'y1']]
+        .map(([xk, yk]) => ({ xk, yk, dist: Math.hypot(st.box[xk] - p.x, st.box[yk] - p.y) }))
+        .sort((m, n) => m.dist - n.dist)[0];
+      if (corner && corner.dist < grab) {
+        st.drag = { xk: corner.xk, yk: corner.yk };
+        st.loupe = { x: st.box[corner.xk], y: st.box[corner.yk] };
+      } else if (b && p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) {
+        st.drag = { move: p };
+        st.loupe = null;
+      } else {
+        st.box = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+        st.drag = { xk: 'x1', yk: 'y1' };
+      }
     }
+    st.drag.id = e.pointerId;
     draw();
   }
   function move(e) {
-    if (!st.drag) return;
+    if (!st.drag || e.pointerId !== st.drag.id) return;
     const p = pos(e);
-    if (st.drag.box) {
-      st.box.x1 = p.x;
-      st.box.y1 = p.y;
-    } else st.pts[st.drag.pt] = p;
+    if (st.drag.move) {
+      const b = boxRect();
+      const dx = Math.min(Math.max(p.x - st.drag.move.x, -b.x), canvas.width - b.x - b.w);
+      const dy = Math.min(Math.max(p.y - st.drag.move.y, -b.y), canvas.height - b.y - b.h);
+      st.box = { x0: b.x + dx, y0: b.y + dy, x1: b.x + b.w + dx, y1: b.y + b.h + dy };
+      st.drag.move = { x: st.drag.move.x + dx, y: st.drag.move.y + dy };
+    } else if (st.drag.xk) {
+      st.box[st.drag.xk] = p.x;
+      st.box[st.drag.yk] = p.y;
+      st.loupe = p;
+    } else {
+      st.pts[st.drag.pt] = p;
+      st.loupe = p;
+    }
     draw();
   }
-  function up() {
-    if (!st.drag) return;
-    const wasRef = !st.drag.box;
+  function up(e) {
+    if (!st.drag || (e && e.pointerId !== st.drag.id)) return;
+    const wasRef = 'pt' in st.drag;
     st.drag = null;
+    st.loupe = null;
+    const b = boxRect();
+    if (b) st.box = b.w < 8 || b.h < 8 ? null : { x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h };
     if (wasRef && st.pts.length === 2 && !st.box) st.mode = 'box';
     draw();
   }
@@ -234,29 +313,31 @@ export async function openMeasure(file) {
       ac.abort();
       ro.disconnect();
       overlay.hidden = true;
+      document.documentElement.classList.remove('locked');
       resolve(result);
     };
     on(canvas, 'pointerdown', down);
     on(canvas, 'pointermove', move);
     on(canvas, 'pointerup', up);
     on(canvas, 'pointercancel', up);
+    on(canvas, 'contextmenu', (e) => e.preventDefault());
     on($('mModeRef'), 'click', () => { st.mode = 'ref'; draw(); });
     on($('mModeBox'), 'click', () => { st.mode = 'box'; draw(); });
     on($('mRef'), 'change', draw);
     on($('mRefCustom'), 'input', draw);
+    on($('mReset'), 'click', () => { st.mode = 'ref'; st.pts = []; st.box = null; draw(); });
     on($('mCancel'), 'click', () => finish(null));
     on($('mSave'), 'click', () => {
       const sz = size();
       if (!sz) return;
       const thumb = cropToThumb(src, boxRect());
-      const depth = Number($('mDepth').value);
       finish({
-        name: $('mName').value.trim(),
+        name: '',
         w: sz.w,
         h: sz.h,
-        d: depth > 0 ? depth : sz.w,
-        depthSet: depth > 0,
-        hero: $('mHero').checked,
+        d: sz.w,
+        depthSet: false,
+        hero: false,
         colors: dominantColors(thumb),
         thumb: thumb.toDataURL('image/jpeg', 0.85),
         cut: makeCutout(thumb),

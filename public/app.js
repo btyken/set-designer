@@ -97,6 +97,21 @@ const state = {
   message: null,
 };
 const openEditors = new Set();
+let howTouched = false;
+const onPhone = () => matchMedia('(pointer: coarse)').matches;
+
+/** Opens the phone share sheet for an image (save to Photos, send in chat). False if unsupported. */
+async function shareImage(url, filename, title) {
+  try {
+    const blob = await (await fetch(url)).blob();
+    const file = new File([blob], filename, { type: blob.type });
+    if (!navigator.canShare?.({ files: [file] })) return false;
+    await navigator.share({ files: [file], title });
+    return true;
+  } catch (err) {
+    return err?.name === 'AbortError'; // closing the sheet is not a failure
+  }
+}
 let scene;
 const saveItems = () => save('items', state.items);
 const saveBrief = () => save('brief', state.brief);
@@ -182,6 +197,7 @@ function renderBar() {
 function renderItems() {
   $('itemGrid').replaceChildren(...state.items.map(itemCard));
   $('itemEmpty').hidden = state.items.length > 0;
+  if (!howTouched) $('how').open = state.items.length === 0;
   $('itemCount').textContent = state.items.length ? `${state.items.length} item${state.items.length > 1 ? 's' : ''}` : '';
   renderBar();
 }
@@ -266,14 +282,15 @@ async function analyseItem(it) {
 async function addPhoto(file) {
   const m = await openMeasure(file);
   if (!m) return;
-  if (m.hero) for (const o of state.items) o.hero = false;
-  const it = { id: newId(), shape: m.w > m.h * 2.5 ? 'flat' : 'box', named: Boolean(m.name), ...m };
-  if (!it.name) it.name = `Item ${state.items.length + 1}`;
+  const it = { id: newId(), shape: m.w > m.h * 2.5 ? 'flat' : 'box', named: false, ...m };
+  it.name = `Item ${state.items.length + 1}`;
   state.items.push(it);
-  // Without AI the name and shape are manual, so open the editor straight away.
-  if (!state.ai) openEditors.add(it.id);
+  // Name, depth and shape are set on the card, so open its editor straight away.
+  openEditors.clear();
+  openEditors.add(it.id);
   saveItems();
   renderItems();
+  document.querySelector('#itemGrid .card:last-child')?.scrollIntoView({ block: 'center' });
   analyseItem(it);
 }
 
@@ -491,7 +508,10 @@ function openLightbox(shot, name) {
   $('lbImg').src = shot.url;
   $('lbImg').alt = `${shot.name} mockup`;
   $('lbSave').href = shot.url;
-  $('lbSave').download = `${name}-${shot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.jpg`;
+  const file = `${name}-${shot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.jpg`;
+  $('lbSave').download = file;
+  $('lbShare').hidden = !(onPhone() && navigator.canShare);
+  $('lbShare').onclick = async () => { if (!(await shareImage(shot.url, file, shot.name))) $('lbSave').click(); };
   $('lightbox').hidden = false;
 }
 
@@ -586,19 +606,25 @@ async function boot() {
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => scene?.setView(b.dataset.view));
   $('barNext').addEventListener('click', () => (state.step === 'items' ? goto('brief') : generate()));
   $('barBack').addEventListener('click', () => goto('items'));
-  $('fileInput').addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (file && $('measure').hidden) await addPhoto(file);
-  });
+  for (const id of ['fileInput', 'galleryInput']) {
+    $(id).addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (file && $('measure').hidden) await addPhoto(file);
+    });
+  }
+  $('how').querySelector('summary').addEventListener('click', () => { howTouched = true; });
   $('sampleBtn').addEventListener('click', loadSamples);
   $('regenBtn').addEventListener('click', generate);
   $('tLabels').addEventListener('change', (e) => { if (scene) { scene.showLabels = e.target.checked; scene.applyVisibility(); } });
   $('tLights').addEventListener('change', (e) => { if (scene) { scene.showLights = e.target.checked; scene.applyVisibility(); } });
-  $('snapBtn').addEventListener('click', () => {
+  $('snapBtn').addEventListener('click', async () => {
     if (!scene) return;
     scene.renderer.render(scene.scene, scene.camera);
-    h('a', { href: $('scene').toDataURL('image/png'), download: `set-plan-option-${state.active + 1}.png` }).click();
+    const url = $('scene').toDataURL('image/png');
+    const file = `set-plan-option-${state.active + 1}.png`;
+    if (onPhone() && (await shareImage(url, file, 'Set plan'))) return;
+    h('a', { href: url, download: file }).click();
   });
   $('lbClose').addEventListener('click', () => { $('lightbox').hidden = true; });
   $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) $('lightbox').hidden = true; });
@@ -620,6 +646,7 @@ async function boot() {
   try {
     state.ai = (await api('api/status')).ai;
   } catch { /* static hosting or offline: rules mode */ }
+  if (onPhone()) $('planHint').textContent = 'swipe sideways to turn, pinch to zoom';
   const chip = $('brain');
   chip.textContent = state.ai ? 'Claude AI on' : 'Built-in rules';
   chip.className = 'tag' + (state.ai ? ' on' : '');

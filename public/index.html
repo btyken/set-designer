@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f8f8f8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Set Designer">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="icon" href="./icon-192.png">
   <title>Set Designer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +22,7 @@
 <body>
   <header class="top">
     <div class="top-in">
-      <span class="brand"><i aria-hidden="true"></i>Set Designer</span>
+      <span class="brand"><i aria-hidden="true"></i><span>Set Designer</span></span>
       <nav class="steps" aria-label="Steps">
         <button data-step="items" aria-current="true"><span>1</span>Items</button>
         <button data-step="brief"><span>2</span>Brief</button>
@@ -32,21 +38,28 @@
       <h1>What do you have to work with?</h1>
       <p class="lede">Photograph each prop once. The app measures it from a bank card in the same shot.</p>
 
-      <ol class="howto">
-        <li><b>1</b><div><strong>Stand a card beside the item</strong><span>Same distance from the camera as the item, against a plain wall.</span></div></li>
-        <li><b>2</b><div><strong>Shoot straight-on</strong><span>Lens level with the middle of the item.</span></div></li>
-        <li><b>3</b><div><strong>Mark the card, box the item</strong><span>Two taps and one drag. The size is worked out for you.</span></div></li>
-      </ol>
-
       <div class="toolbar">
         <label class="btn primary">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6.5h3l1.2-2h5.6l1.2 2h3v9H3z M10 13.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
-          Add a photo
+          Take a photo
           <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
         </label>
-        <button id="sampleBtn" class="btn">Try with sample items</button>
+        <label class="btn touch-only">
+          From gallery
+          <input id="galleryInput" type="file" accept="image/*" hidden>
+        </label>
+        <button id="sampleBtn" class="btn">Try sample items</button>
         <span id="itemCount" class="count"></span>
       </div>
+
+      <details id="how" class="how">
+        <summary>How to take the photo</summary>
+        <ol class="howto">
+          <li><b>1</b><div><strong>Stand a card beside the item</strong><span>Same distance from the camera as the item, against a plain wall.</span></div></li>
+          <li><b>2</b><div><strong>Shoot straight-on</strong><span>Lens level with the middle of the item.</span></div></li>
+          <li><b>3</b><div><strong>Mark the card, box the item</strong><span>Two taps and one drag. The size is worked out for you.</span></div></li>
+        </ol>
+      </details>
 
       <div id="itemGrid" class="grid"></div>
       <div id="itemEmpty" class="empty">
@@ -122,7 +135,7 @@
         <div id="designTabs" class="options" role="tablist"></div>
         <h2 class="sub"><span>A</span>Photo mockups <small>how the shots could turn out</small></h2>
         <div id="mockups" class="mockups"></div>
-        <h2 class="sub"><span>B</span>Set plan <small>drag to look around</small></h2>
+        <h2 class="sub"><span>B</span>Set plan <small id="planHint">drag to look around</small></h2>
         <div class="design">
           <div class="viewer">
             <div class="stage"><canvas id="scene"></canvas></div>
@@ -154,15 +167,16 @@
 
   <div id="measure" class="overlay" hidden>
     <div class="measure-top">
-      <strong>Measure this item</strong>
       <button id="mCancel" class="btn small">Cancel</button>
-    </div>
-    <div class="measure-tools">
       <div class="seg">
-        <button id="mModeRef" aria-pressed="true"><b>1</b> Mark the card</button>
-        <button id="mModeBox" aria-pressed="false"><b>2</b> Box the item</button>
+        <button id="mModeRef" aria-pressed="true"><b>1</b> Card</button>
+        <button id="mModeBox" aria-pressed="false"><b>2</b> Item</button>
       </div>
-      <label class="inline">Reference
+    </div>
+    <p id="mHint" class="hint" role="status"></p>
+    <div id="measureStage" class="measure-stage"><canvas id="measureCanvas"></canvas></div>
+    <div class="measure-bottom">
+      <label class="ref">What you marked
         <select id="mRef">
           <option value="8.56">Bank card, long edge (8.56 cm)</option>
           <option value="5.4">Bank card, short edge (5.4 cm)</option>
@@ -172,13 +186,7 @@
         </select>
       </label>
       <input id="mRefCustom" type="number" min="0.5" step="0.1" placeholder="cm" inputmode="decimal" aria-label="Reference length in cm" hidden>
-    </div>
-    <p id="mHint" class="hint"></p>
-    <div id="measureStage" class="measure-stage"><canvas id="measureCanvas"></canvas></div>
-    <div class="measure-bottom">
-      <label>Name<input id="mName" type="text" placeholder="Optional"></label>
-      <label>Depth<span class="unit"><input id="mDepth" type="number" min="0.5" step="0.1" placeholder="Same as width" inputmode="decimal"><em>cm</em></span></label>
-      <label class="check"><input id="mHero" type="checkbox"> This is the hero product</label>
+      <button id="mReset" class="btn">Start over</button>
       <button id="mSave" class="btn primary" disabled>Save item</button>
     </div>
   </div>
@@ -193,7 +201,7 @@
   </div>
 
   <div id="lightbox" class="lightbox" hidden>
-    <div class="lightbox-bar"><strong id="lbTitle"></strong><span class="grow"></span><a id="lbSave" class="btn small" download>Save image</a><button id="lbClose" class="btn small">Close</button></div>
+    <div class="lightbox-bar"><strong id="lbTitle"></strong><span class="grow"></span><button id="lbShare" class="btn small" hidden>Share</button><a id="lbSave" class="btn small" download>Save</a><button id="lbClose" class="btn small">Close</button></div>
     <img id="lbImg" alt="">
   </div>
 
