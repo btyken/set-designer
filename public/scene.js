@@ -427,7 +427,7 @@ export class SetScene {
     const focus = heroPos || points[0]?.centre;
     if (focus) {
       const hero = points.find((p) => p.centre === focus);
-      const dist = Math.max((hero?.it.h || 20) * 4.2, 95);
+      const dist = Math.max((hero?.it.h || 20) * 3.4, 62);
       shots.push({
         name: heroPos ? 'Hero close-up' : 'Close-up',
         note: 'Moved in on the focal piece, slightly off to one side.',

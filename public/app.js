@@ -5,6 +5,7 @@ import { localDesigns, FURNITURE } from './rules.js';
 const $ = (id) => document.getElementById(id);
 const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
 const FRAMES = ['16:9', '4:5', '1:1', '9:16'];
+const PRODUCT_CATS = ['Cleanser', 'Sunscreen', 'Serum', 'Moisturiser', 'Mask', 'Makeup', 'Bundle', 'Other'];
 const MOODS = [
   { name: 'Clean minimal', say: 'Bright, airy, lots of space', colors: ['#f2f0ec', '#dcd8d1', '#9aa3a8'] },
   { name: 'Warm cozy', say: 'Soft, golden, homely', colors: ['#e9d3b4', '#c98a4b', '#7a4a2b'] },
@@ -24,7 +25,7 @@ const PEOPLE = [
   { id: 'seated', name: 'Person seated', say: 'Adds a chair, for talking-head shots', icon: '<path d="M6 31h44"/><circle cx="24" cy="7" r="4"/><path d="M24 11v10h9v10M18 14v17M18 22h6"/>' },
 ];
 const DEFAULT_BRIEF = {
-  roomW: 300, roomD: 250, camera: 'front', frame: '16:9', person: 'none',
+  product: null, roomW: 300, roomD: 250, camera: 'front', frame: '16:9', person: 'none',
   furniture: { table: true, shelf: true, plinths: true, side_table: false },
   mood: MOODS[0].name, brand: [], text: '', surfaces: '',
 };
@@ -89,6 +90,8 @@ const state = {
   ai: false,
   step: 'items',
   items: [],
+  products: [],
+  tab: 'props',
   brief: structuredClone(DEFAULT_BRIEF),
   designs: [],
   source: '',
@@ -114,6 +117,25 @@ async function shareImage(url, filename, title) {
 }
 let scene;
 const saveItems = () => save('items', state.items);
+const saveProducts = () => save('products', state.products);
+const featured = (brief = state.brief) => state.products.find((p) => p.id === brief.product) || null;
+/** Props plus the featured product, in the shape the designer and 3D scene expect. */
+function designThings(brief = state.brief) {
+  const p = featured(brief);
+  const things = state.items.map((it) => ({ ...it, hero: false }));
+  // The product is always shown as its real photo: the cut-out, or the full photo if chosen.
+  if (p) things.push({ ...p, hero: true, cut: p.useCut && p.cut ? p.cut : p.thumb });
+  return things;
+}
+async function fileToDataUrl(file, max = 900) {
+  const img = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k);
+  c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
 const saveBrief = () => save('brief', state.brief);
 const newId = () => 'i' + Math.random().toString(36).slice(2, 8);
 const fmt = (n) => String(Math.round(n * 10) / 10);
@@ -161,7 +183,7 @@ function goto(step) {
   for (const s of ['items', 'brief', 'designs']) $(`step-${s}`).hidden = s !== step;
   for (const b of document.querySelectorAll('.steps button')) {
     b.setAttribute('aria-current', String(b.dataset.step === step));
-    const done = (b.dataset.step === 'items' && state.items.length > 0) || (b.dataset.step === 'designs' && state.designs.length > 0);
+    const done = (b.dataset.step === 'items' && state.items.length + state.products.length > 0) || (b.dataset.step === 'designs' && state.designs.length > 0);
     b.classList.toggle('done', done && b.dataset.step !== step);
   }
   renderBar();
@@ -176,83 +198,127 @@ function renderBar() {
   $('bar').hidden = state.step === 'designs';
   text.className = state.message?.error ? 'error' : '';
   const n = state.items.length;
-  const hero = state.items.find((it) => it.hero);
-  const count = `${n} item${n === 1 ? '' : 's'}`;
+  const hero = featured();
+  const total = n + (hero ? 1 : 0);
+  const count = `${n} prop${n === 1 ? '' : 's'}`;
   if (state.step === 'items') {
     back.hidden = true;
     next.textContent = 'Next: describe the set';
-    next.disabled = n === 0;
-    text.textContent = n === 0 ? 'Add at least one item to continue.' : `${count}. ${hero ? `Hero: ${hero.name}.` : 'No hero picked yet.'}`;
+    next.disabled = total === 0;
+    text.textContent = total === 0 ? 'Add at least one prop or product to continue.' : `${count}. ${hero ? `Product: ${hero.name}.` : 'No product featured yet.'}`;
   } else if (state.step === 'brief') {
     back.hidden = false;
     next.textContent = state.busy ? 'Designing…' : 'Design the set';
-    next.disabled = state.busy || n === 0;
+    next.disabled = state.busy || total === 0;
     text.textContent = state.message?.text
-      || (n === 0 ? 'Add at least one item first.' : `${count} in a ${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm set. ${state.brief.mood}.`);
+      || (total === 0 ? 'Add at least one prop or product first.' : `${hero ? `${hero.name} + ` : ''}${count} in a ${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm set. ${state.brief.mood}.`);
   }
 }
 
 // ---------- Items ----------
 
 function renderItems() {
-  $('itemGrid').replaceChildren(...state.items.map(itemCard));
-  $('itemEmpty').hidden = state.items.length > 0;
-  if (!howTouched) $('how').open = state.items.length === 0;
-  $('itemCount').textContent = state.items.length ? `${state.items.length} item${state.items.length > 1 ? 's' : ''}` : '';
+  const prod = state.tab === 'products';
+  const list = prod ? state.products : state.items;
+  for (const b of $('libTabs').children) {
+    const mine = b.dataset.tab === state.tab;
+    b.setAttribute('aria-pressed', String(mine));
+    const n = b.dataset.tab === 'products' ? state.products.length : state.items.length;
+    b.querySelector('span').textContent = n ? ` ${n}` : '';
+  }
+  $('libSay').textContent = prod
+    ? 'Register each BTY Advance product once. Its real photo is used in every mockup, so the label is never redrawn.'
+    : 'Photograph each prop once, then tell the app how tall it is. It works out the rest.';
+  $('sampleBtn').hidden = prod;
+  $('itemGrid').replaceChildren(...list.map((it) => itemCard(it, prod)));
+  $('itemEmpty').hidden = list.length > 0;
+  $('itemEmpty').replaceChildren(
+    h('strong', {}, prod ? 'No products yet' : 'No props yet'),
+    h('span', {}, prod ? 'Photograph the product front-on against a plain wall, label facing the camera.'
+      : 'Add your first photo, or load the sample items to see how it works.'),
+  );
+  if (!howTouched) $('how').open = state.items.length + state.products.length === 0;
+  $('itemCount').textContent = '';
   renderBar();
 }
 
-function itemCard(it) {
+function itemCard(it, prod) {
   const open = openEditors.has(it.id);
+  const store = prod ? saveProducts : saveItems;
+  const isFeatured = prod && state.brief.product === it.id;
   const numField = (label, key) => h('label', {}, label, h('span', { class: 'unit' }, h('input', {
     type: 'number', min: 0.5, step: 0.1, value: it[key], inputMode: 'decimal',
     onchange: (e) => {
       const v = Number(e.target.value);
       if (v > 0) it[key] = v;
       if (key === 'd') it.depthSet = true;
-      saveItems();
+      store();
       renderItems();
     },
   }), h('em', {}, 'cm')));
+  const extraPhoto = (key, label) => h('label', { class: 'btn small extra' },
+    it[key] ? h('img', { src: it[key], alt: '' }) : null,
+    it[key] ? `Replace ${label}` : `Add ${label} photo`,
+    h('input', {
+      type: 'file', accept: 'image/*', hidden: true,
+      onchange: async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        it[key] = await fileToDataUrl(file).catch(() => it[key]);
+        store();
+        renderItems();
+      },
+    }));
+  const shown = prod && !(it.useCut && it.cut) ? it.thumb : it.cut || it.thumb;
 
-  return h('article', { class: 'card' + (it.hero ? ' hero' : '') },
+  return h('article', { class: 'card' + (isFeatured ? ' hero' : '') },
     h('div', { class: 'thumb' },
-      h('img', { src: it.cut || it.thumb, alt: '' }),
-      it.pending ? h('span', { class: 'flag busy' }, 'Analysing…') : it.hero && h('span', { class: 'flag' }, 'Hero'),
-      !it.cut && h('span', { class: 'flag note', title: 'The background could not be removed. Shoot against a plain wall for a cleaner result.' }, 'No cut-out'),
+      h('img', { src: shown, alt: '' }),
+      it.pending ? h('span', { class: 'flag busy' }, 'Analysing…') : isFeatured && h('span', { class: 'flag' }, 'Featured'),
+      !it.cut && h('span', { class: 'flag note', title: 'The background could not be removed. Shoot against a plain wall for a cleaner result.' }, prod ? 'Full photo' : 'No cut-out'),
     ),
     h('div', { class: 'card-body' },
       h('div', { class: 'card-name' }, it.name),
-      h('div', { class: 'card-size' }, `${fmt(it.w)} × ${fmt(it.h)} × ${fmt(it.d)} cm`,
+      h('div', { class: 'card-size' }, `${prod && it.category ? it.category + ' · ' : ''}${fmt(it.w)} × ${fmt(it.h)} × ${fmt(it.d)} cm`,
         h('span', { class: 'dots' }, (it.colors || []).map((c) => h('i', { style: `background:${c}`, title: c })))),
     ),
     open && h('div', { class: 'editor' },
       h('label', {}, 'Name', h('input', {
         type: 'text', value: it.name,
-        onchange: (e) => { it.name = e.target.value.trim() || it.name; it.named = true; saveItems(); renderItems(); },
+        onchange: (e) => { it.name = e.target.value.trim() || it.name; it.named = true; store(); renderItems(); },
       })),
+      prod && h('label', {}, 'Category', h('select', { onchange: (e) => { it.category = e.target.value; store(); renderItems(); } },
+        PRODUCT_CATS.map((c) => h('option', { value: c, selected: it.category === c }, c)))),
       h('div', { class: 'dims' }, numField('Width', 'w'), numField('Height', 'h'), numField('Depth', 'd')),
-      h('label', {}, 'Closest shape', h('select', { onchange: (e) => { it.shape = e.target.value; saveItems(); } },
-        SHAPES.map((s) => h('option', { value: s, selected: it.shape === s }, s[0].toUpperCase() + s.slice(1))))),
+      h('label', {}, 'Closest shape', h('select', { onchange: (e) => { it.shape = e.target.value; store(); } },
+        SHAPES.map((sh) => h('option', { value: sh, selected: it.shape === sh }, sh[0].toUpperCase() + sh.slice(1))))),
+      prod && it.cut && h('div', { class: 'field' }, h('span', {}, 'Photo used in mockups'),
+        h('div', { class: 'seg' },
+          h('button', { type: 'button', 'aria-pressed': String(!!it.useCut), onclick: () => { it.useCut = true; store(); renderItems(); } }, 'Cut-out'),
+          h('button', { type: 'button', 'aria-pressed': String(!it.useCut), onclick: () => { it.useCut = false; store(); renderItems(); } }, 'Full photo')),
+        h('span', { class: 'help' }, 'If the cut-out has eaten into the label or packaging, switch to the full photo.')),
+      prod && h('div', { class: 'extras' }, extraPhoto('side', 'side'), extraPhoto('back', 'back')),
     ),
     h('div', { class: 'card-actions' },
-      h('button', {
-        'aria-pressed': String(!!it.hero), title: 'The product the set is built around',
-        onclick: () => {
-          const next = !it.hero;
-          for (const o of state.items) o.hero = false;
-          it.hero = next;
-          saveItems();
-          renderItems();
-        },
-      }, it.hero ? '★ Hero' : '☆ Make hero'),
+      prod && h('button', {
+        'aria-pressed': String(isFeatured), title: 'The product the set is built around',
+        onclick: () => { state.brief.product = isFeatured ? null : it.id; saveBrief(); renderItems(); renderBrief(); },
+      }, isFeatured ? '★ Featured' : '☆ Feature'),
       h('button', {
         'aria-expanded': String(open),
         onclick: () => { open ? openEditors.delete(it.id) : openEditors.add(it.id); renderItems(); },
       }, open ? 'Done' : 'Edit'),
       h('button', {
         class: 'del', 'aria-label': `Remove ${it.name}`,
-        onclick: () => { state.items = state.items.filter((o) => o !== it); saveItems(); renderItems(); },
+        onclick: () => {
+          if (prod) {
+            state.products = state.products.filter((o) => o !== it);
+            if (state.brief.product === it.id) { state.brief.product = state.products[0]?.id || null; saveBrief(); }
+            renderBrief();
+          } else state.items = state.items.filter((o) => o !== it);
+          store();
+          renderItems();
+        },
       }, 'Remove'),
     ),
   );
@@ -280,18 +346,30 @@ async function analyseItem(it) {
 }
 
 async function addPhoto(file) {
-  const m = await openMeasure(file);
+  const prod = state.tab === 'products';
+  // Products keep a sharper photo because they are the hero of every mockup.
+  const m = await openMeasure(file, { max: prod ? 1024 : 512 });
   if (!m) return;
   const it = { id: newId(), shape: m.w > m.h * 2.5 ? 'flat' : 'box', named: false, ...m };
-  it.name = `Item ${state.items.length + 1}`;
-  state.items.push(it);
+  delete it.hero;
+  if (prod) {
+    it.name = `Product ${state.products.length + 1}`;
+    it.category = 'Other';
+    it.useCut = Boolean(it.cut);
+    state.products.push(it);
+    if (!featured()) { state.brief.product = it.id; saveBrief(); renderBrief(); }
+    saveProducts();
+  } else {
+    it.name = `Item ${state.items.length + 1}`;
+    state.items.push(it);
+    saveItems();
+  }
   // Name, depth and shape are set on the card, so open its editor straight away.
   openEditors.clear();
   openEditors.add(it.id);
-  saveItems();
   renderItems();
   document.querySelector('#itemGrid .card:last-child')?.scrollIntoView({ block: 'center' });
-  analyseItem(it);
+  if (!prod) analyseItem(it);
 }
 
 function loadSamples() {
@@ -377,11 +455,19 @@ function loadSamples() {
     fctx.fillStyle = '#ecebe8';
     fctx.fillRect(0, 0, W, H);
     fctx.drawImage(c, 0, 0);
-    state.items.push({
+    const rec = {
       id: newId(), name: s.name, named: true, w: s.w, h: s.h, d: s.d, depthSet: true, shape: s.shape,
-      hero: Boolean(s.hero) && !state.items.some((o) => o.hero), colors: [s.color],
-      thumb: flat.toDataURL('image/jpeg', 0.85), cut: c.toDataURL('image/png'),
-    });
+      colors: [s.color], thumb: flat.toDataURL('image/jpeg', 0.85), cut: c.toDataURL('image/png'),
+    };
+    if (s.hero) {
+      // The sample bottle stands in for a product until a real one is registered.
+      if (state.products.length) continue;
+      state.products.push({ ...rec, name: 'Sample serum bottle', category: 'Serum', useCut: true });
+      state.brief.product = rec.id;
+      saveProducts();
+      saveBrief();
+      renderBrief();
+    } else state.items.push(rec);
   }
   saveItems();
   renderItems();
@@ -414,6 +500,18 @@ function renderBrief() {
     class: 'choice', type: 'button', role: 'radio', 'aria-checked': String(b[key] === c.id),
     onclick: () => { b[key] = c.id; saveBrief(); renderBrief(); },
   }, svg(c.icon), h('strong', {}, c.name), h('span', {}, c.say))));
+  $('prodPick').replaceChildren(...[
+    ...state.products.map((p) => h('button', {
+      class: 'choice prod', type: 'button', role: 'radio', 'aria-checked': String(b.product === p.id),
+      onclick: () => { b.product = p.id; saveBrief(); renderBrief(); renderItems(); },
+    }, h('img', { src: p.useCut && p.cut ? p.cut : p.thumb, alt: '' }), h('strong', {}, p.name), h('span', {}, `${p.category || 'Product'} · ${fmt(p.h)} cm tall`))),
+    state.products.length > 0 && h('button', {
+      class: 'choice', type: 'button', role: 'radio', 'aria-checked': String(!featured()),
+      onclick: () => { b.product = null; saveBrief(); renderBrief(); renderItems(); },
+    }, h('strong', {}, 'No product'), h('span', {}, 'Design a set with props only')),
+    state.products.length === 0 && h('p', { class: 'muted' }, 'No products registered yet. ',
+      h('button', { class: 'btn small', type: 'button', onclick: () => { state.tab = 'products'; goto('items'); renderItems(); } }, 'Add a product')),
+  ].filter(Boolean));
   radio(PEOPLE, 'person', 'people');
   radio(CAMERAS, 'camera', 'cams');
 
@@ -463,7 +561,8 @@ function bindBrief() {
 // ---------- Generate ----------
 
 async function generate() {
-  if (state.busy || !state.items.length) return;
+  const things = designThings();
+  if (state.busy || !things.length) return;
   state.busy = true;
   state.message = state.ai ? { text: 'Claude is designing your sets. This usually takes under a minute…' } : null;
   $('regenBtn').disabled = true;
@@ -472,16 +571,16 @@ async function generate() {
   try {
     if (state.ai) {
       try {
-        const out = await api('api/generate', { items: state.items.map(({ cut, ...it }) => it), brief: state.brief, count: 3 });
+        const out = await api('api/generate', { items: things.map(({ cut, side, back, ...it }) => it), brief: state.brief, count: 3 });
         state.designs = out.designs;
         state.source = 'ai';
       } catch (err) {
         fallbackNote = `Claude was unavailable (${err.message}). These designs come from the built-in rules instead.`;
-        state.designs = localDesigns(state.items, state.brief);
+        state.designs = localDesigns(things, state.brief);
         state.source = 'rules';
       }
     } else {
-      state.designs = localDesigns(state.items, state.brief);
+      state.designs = localDesigns(things, state.brief);
       state.source = 'rules';
     }
     state.active = 0;
@@ -536,12 +635,12 @@ async function renderDesigns() {
   const stage = document.querySelector('.stage');
   stage.style.aspectRatio = `${fa} / ${fb}`;
   stage.style.maxWidth = `calc(72vh * ${fa / fb})`;
-  renderDetails(d);
+  renderDetails(d, brief);
 
   scene ??= new SetScene($('scene'));
   const index = state.active;
   $('mockups').replaceChildren(h('p', { class: 'muted' }, 'Rendering mockups…'));
-  const ready = await scene.setDesign(d, state.items, brief);
+  const ready = await scene.setDesign(d, designThings(brief), brief);
   if (!ready || index !== state.active) return;
   const shots = scene.renderShots();
   const slug = `set-option-${index + 1}`;
@@ -552,8 +651,8 @@ async function renderDesigns() {
   )));
 }
 
-function renderDetails(d) {
-  const names = new Map(state.items.map((it) => [it.id, it.name]));
+function renderDetails(d, brief) {
+  const names = new Map(designThings(brief).map((it) => [it.id, (it.hero ? '★ ' : '') + it.name]));
   const li = (badge, title, spec, say) => h('li', {}, badge, h('strong', {}, title), h('div', { class: 'spec' }, spec), h('div', { class: 'say' }, say || ''));
   $('details').replaceChildren(...[
     state.designNote && h('p', { class: 'note', style: 'color:var(--danger);margin:0 0 12px' }, state.designNote),
@@ -615,6 +714,7 @@ async function boot() {
   }
   $('how').querySelector('summary').addEventListener('click', () => { howTouched = true; });
   $('sampleBtn').addEventListener('click', loadSamples);
+  for (const b of $('libTabs').children) b.addEventListener('click', () => { state.tab = b.dataset.tab; openEditors.clear(); renderItems(); });
   $('regenBtn').addEventListener('click', generate);
   $('tLabels').addEventListener('change', (e) => { if (scene) { scene.showLabels = e.target.checked; scene.applyVisibility(); } });
   $('tLights').addEventListener('change', (e) => { if (scene) { scene.showLights = e.target.checked; scene.applyVisibility(); } });
@@ -630,13 +730,29 @@ async function boot() {
   $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) $('lightbox').hidden = true; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('lightbox').hidden = true; });
 
-  const [items, brief, designs] = await Promise.all([load('items'), load('brief'), load('designs')]);
+  const [items, brief, designs, products] = await Promise.all([load('items'), load('brief'), load('designs'), load('products')]);
   if (Array.isArray(items)) state.items = items.map(({ pending, ...it }) => it);
+  if (Array.isArray(products)) state.products = products;
   if (brief) {
     for (const key of Object.keys(DEFAULT_BRIEF)) if (brief[key] != null) state.brief[key] = brief[key];
     if (!CAMERAS.some((c) => c.id === state.brief.camera)) state.brief.camera = 'front';
     state.brief.furniture = { ...DEFAULT_BRIEF.furniture, ...state.brief.furniture };
   }
+  // Older versions marked one item as the hero. That item becomes the featured product.
+  const oldHero = state.items.find((it) => it.hero);
+  if (oldHero) {
+    if (!state.products.length) {
+      state.items = state.items.filter((it) => it !== oldHero);
+      const { hero, ...rest } = oldHero;
+      state.products.push({ ...rest, category: 'Other', useCut: Boolean(rest.cut) });
+      state.brief.product = rest.id;
+      saveProducts();
+      saveBrief();
+    }
+    for (const it of state.items) delete it.hero;
+    saveItems();
+  }
+  if (!featured()) state.brief.product = null;
   if (designs?.designs?.[0]?.furniture && designs.brief?.roomW) {
     state.designs = designs.designs;
     state.source = designs.source;

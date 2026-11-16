@@ -173,7 +173,7 @@ export function findItemBox(source) {
 }
 
 /** Opens the sizing screen for a photo. Resolves to item fields, or null if cancelled. */
-export async function openMeasure(file) {
+export async function openMeasure(file, { max = 512 } = {}) {
   const img = await loadImage(file);
   const k = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
   const src = document.createElement('canvas');
@@ -463,7 +463,7 @@ export async function openMeasure(file) {
     on($('mSave'), 'click', () => {
       const sz = size();
       if (!sz) return;
-      const thumb = cropToThumb(src, boxRect());
+      const thumb = cropToThumb(src, boxRect(), max);
       finish({
         name: '',
         w: sz.w,
@@ -472,7 +472,7 @@ export async function openMeasure(file) {
         depthSet: false,
         hero: false,
         colors: dominantColors(thumb),
-        thumb: thumb.toDataURL('image/jpeg', 0.85),
+        thumb: thumb.toDataURL('image/jpeg', max > 512 ? 0.92 : 0.85),
         cut: makeCutout(thumb),
       });
     });

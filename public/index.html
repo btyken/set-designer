@@ -36,7 +36,11 @@
     <section id="step-items">
       <p class="kicker">Step 1 of 3</p>
       <h1>What do you have to work with?</h1>
-      <p class="lede">Photograph each prop once, then tell the app how tall it is. It works out the rest.</p>
+      <div id="libTabs" class="seg tabs" role="group" aria-label="What to add">
+        <button data-tab="props" aria-pressed="true">Props<span></span></button>
+        <button data-tab="products" aria-pressed="false">Products<span></span></button>
+      </div>
+      <p id="libSay" class="lede"></p>
 
       <div class="toolbar">
         <label class="btn primary">
@@ -62,10 +66,7 @@
       </details>
 
       <div id="itemGrid" class="grid"></div>
-      <div id="itemEmpty" class="empty">
-        <strong>No items yet</strong>
-        <span>Add your first photo, or load the sample items to see how it works.</span>
-      </div>
+      <div id="itemEmpty" class="empty"></div>
     </section>
 
     <section id="step-brief" hidden>
@@ -75,7 +76,12 @@
 
       <div class="form">
         <div class="block">
-          <h2><span>01</span>Set area</h2>
+          <h2><span>01</span>Featured product</h2>
+          <p class="help">The set is built around it, and its real photo appears in every mockup.</p>
+          <div id="prodPick" class="choices" role="radiogroup" aria-label="Featured product"></div>
+        </div>
+        <div class="block">
+          <h2><span>02</span>Set area</h2>
           <p class="help">The floor space you can dress, measured along the back wall and out toward the camera.</p>
           <div class="row">
             <label>Width along the wall<span class="unit"><input id="bW" type="number" min="100" max="800" inputmode="decimal"><em>cm</em></span></label>
@@ -83,15 +89,15 @@
           </div>
         </div>
         <div class="block">
-          <h2><span>02</span>Who is in the shot</h2>
+          <h2><span>03</span>Who is in the shot</h2>
           <div id="people" class="choices" role="radiogroup" aria-label="Who is in the shot"></div>
         </div>
         <div class="block">
-          <h2><span>03</span>Furniture you can use</h2>
+          <h2><span>04</span>Furniture you can use</h2>
           <div id="furn" class="choices four"></div>
         </div>
         <div class="block">
-          <h2><span>04</span>Camera</h2>
+          <h2><span>05</span>Camera</h2>
           <div id="cams" class="choices" role="radiogroup" aria-label="Camera angle"></div>
           <div class="frame-row">
             <span class="muted">Photo shape</span>
@@ -99,15 +105,15 @@
           </div>
         </div>
         <div class="block">
-          <h2><span>05</span>Mood</h2>
+          <h2><span>06</span>Mood</h2>
           <div id="moods" class="choices moods" role="radiogroup" aria-label="Mood"></div>
         </div>
         <div class="block">
-          <h2><span>06</span>Brand colours <small>optional</small></h2>
+          <h2><span>07</span>Brand colours <small>optional</small></h2>
           <div id="brand" class="brand-row"></div>
         </div>
         <div class="block" id="notesBlock">
-          <h2><span>07</span>Notes <small>optional</small></h2>
+          <h2><span>08</span>Notes <small>optional</small></h2>
           <label>What is the shoot for?
             <textarea id="bText" rows="3" placeholder="e.g. Christmas promo, elegant, gold accents"></textarea>
           </label>
