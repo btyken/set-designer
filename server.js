@@ -38,7 +38,7 @@ const Design = z.object({
   concept: z.string().describe('Two sentences: the idea and why it suits these items'),
   wall_color: z.string().describe('#RRGGBB'),
   floor_color: z.string().describe('#RRGGBB'),
-  floor_finish: z.enum(['wood', 'concrete']),
+  floor_finish: z.enum(['wood', 'concrete', 'paper']),
   wall_suggestion: z.string(),
   floor_suggestion: z.string(),
   ambient_pct: z.number().describe('General room brightness, 10 for a dark moody set to 60 for a bright airy one'),

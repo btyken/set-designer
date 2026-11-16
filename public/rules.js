@@ -65,6 +65,13 @@ export const FURNITURE = {
 };
 
 const MOODS = {
+  // Matches the 2026 BTY Advance product shoot: white paper sweep, white blocks, a glow on the backdrop.
+  'BTY studio': {
+    sat: 0, wallL: 60, floor: ['#dddcd9', 'paper'], furn: '#f6f5f3', key: 5200, keyPct: 66, rimPct: 22, ambient: 18,
+    studio: true, accent: '#e0626b',
+    wallSay: 'White seamless paper, curved down onto the floor so there is no corner line.',
+    floorSay: 'The same white paper carried under the whole set.',
+  },
   'Clean minimal': { sat: 0.3, wallL: 86, floor: ['#bdb8af', 'concrete'], furn: '#f4f2ee', key: 5600, keyPct: 80, rimPct: 30, ambient: 55 },
   'Warm cozy': { sat: 0.7, wallL: 80, floor: ['#a9794c', 'wood'], furn: '#b98b5a', key: 3400, keyPct: 70, rimPct: 45, ambient: 38, shift: 25 },
   'Moody dark': { sat: 0.8, wallL: 16, floor: ['#2a2826', 'concrete'], furn: '#2c2c30', key: 4300, keyPct: 60, rimPct: 75, ambient: 12 },
@@ -260,7 +267,7 @@ export function localDesigns(items, brief) {
     const s = (v) => v * mood.sat;
     const wall = hslToHex(hue + (i === 1 ? 18 : 0), s(20), mood.wallL);
     const main = hslToHex(hue, s(60), 50);
-    const accent = mood.gold ? '#c9a24a' : hslToHex(sc.accent, s(75), 55);
+    const accent = mood.gold ? '#c9a24a' : mood.studio ? (brief.brand?.[0] || mood.accent) : hslToHex(sc.accent, s(75), 55);
     const second = hslToHex(sc.second, s(70), 52);
     const furn = mood.furn || '#f3f1ec';
     const plinth = mood.furn ? furn : main;
@@ -282,18 +289,29 @@ export function localDesigns(items, brief) {
         x_cm: -side * W * 0.6, y_cm: 140, z_cm: D / 2 + 50,
         aim: 'set', modifier: 'Bounced off a white card or wall', note: 'Opposite the key. Lower it for more contrast.',
       },
-      {
+      mood.studio ? {
+        name: 'Edge light', role: 'rim', fixture: 'white', kelvin: keyK, color_hex: kelvinToHex(keyK), intensity_pct: mood.rimPct,
+        x_cm: -side * W * 0.5, y_cm: 190, z_cm: -D / 2 + 45,
+        aim: set.person.present ? 'person' : 'set', modifier: 'Small panel, out of frame',
+        note: 'From behind, just enough to lift white packaging off the white backdrop.',
+      } : {
         name: 'Rim colour', role: 'rim', fixture: 'rgb', kelvin: 0, color_hex: accent, intensity_pct: mood.rimPct,
         x_cm: -side * W * 0.5, y_cm: 190, z_cm: -D / 2 + 45,
         aim: set.person.present ? 'person' : 'set', modifier: 'Bare tube, out of frame',
         note: 'From behind, to outline edges and separate the subject from the wall.',
       },
-      {
+      mood.studio ? {
+        name: 'Backdrop glow', role: 'background', fixture: 'white', kelvin: 4800, color_hex: kelvinToHex(4800), intensity_pct: 100,
+        x_cm: [0, 0.12, -0.1][i] * W, y_cm: 40, z_cm: -D / 2 + 55,
+        aim: 'backdrop', modifier: 'Spot with a snoot or barn doors, hidden behind the blocks',
+        note: 'Makes the soft circle of light on the paper behind the product. Leave the edges of the backdrop darker.',
+      } : {
         name: 'Wall wash', role: 'background', fixture: 'rgb', kelvin: 0, color_hex: i === 0 ? main : second, intensity_pct: Math.round(mood.rimPct * 0.8),
         x_cm: side * W * 0.25, y_cm: 25, z_cm: -D / 2 + 40,
         aim: 'backdrop', modifier: 'Bare, on the floor behind the furniture', note: 'Washes colour up the back wall.',
       },
     ];
+    const washHex = mood.studio ? kelvinToHex(4800) : i === 0 ? main : second;
 
     return {
       name: `${L.name} · ${sc.label.toLowerCase()}`,
@@ -301,15 +319,15 @@ export function localDesigns(items, brief) {
       wall_color: wall,
       floor_color: mood.floor[0],
       floor_finish: mood.floor[1],
-      wall_suggestion: mood.wallL < 30 ? 'Dark matte wall or black paper backdrop.' : 'Plain matte wall or seamless paper backdrop.',
-      floor_suggestion: mood.floor[1] === 'wood' ? 'Wood floor or wood-look vinyl.' : 'Plain floor, or a grey paper sweep.',
+      wall_suggestion: mood.wallSay ? mood.wallSay : mood.wallL < 30 ? 'Dark matte wall or black paper backdrop.' : 'Plain matte wall or seamless paper backdrop.',
+      floor_suggestion: mood.floorSay ? mood.floorSay : mood.floor[1] === 'wood' ? 'Wood floor or wood-look vinyl.' : 'Plain floor, or a grey paper sweep.',
       ambient_pct: mood.ambient,
       palette: [
         { hex: wall, role: 'Wall' },
         { hex: mood.floor[0], role: 'Floor' },
         { hex: plinth, role: 'Furniture' },
-        { hex: accent, role: 'Accent light' },
-        { hex: i === 0 ? main : second, role: 'Wall wash' },
+        { hex: accent, role: mood.studio ? 'Packaging accent' : 'Accent light' },
+        { hex: washHex, role: mood.studio ? 'Backdrop glow' : 'Wall wash' },
       ],
       furniture: set.furniture,
       person: set.person,
@@ -317,11 +335,13 @@ export function localDesigns(items, brief) {
       left_out,
       lights,
       color_combinations: [
+        ...(mood.studio ? [{ name: 'White and coral', colors: ['#ffffff', accent], why: 'The look of the 2026 product shoot: an all-white set where the only colour comes from the packaging.' }] : []),
         { name: sc.label, colors: [accent, second], why: `Uses the ${sc.label.toLowerCase()} relationship to the main colour of your items.` },
         { name: 'Warm and cool', colors: ['#ff9a3c', '#2f7bff'], why: 'Orange against blue separates the subject from the wall on any set.' },
         { name: 'Tone on tone', colors: [hslToHex(hue, s(70), 50), hslToHex(hue + 18, s(60), 38)], why: 'Two shades of the main hue for a calm, single-colour look.' },
       ],
       styling_tips: [
+        ...(mood.studio ? ['Keep every prop white or clear so the coral on the packaging is the only colour in frame.'] : []),
         L.tip,
         'Group pieces in odd numbers and vary their heights.',
         set.person.present ? 'Keep props below chest height in front of the person so nothing covers them.' : 'Leave clear space around the focal piece so it does not merge with its neighbours.',

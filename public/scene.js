@@ -54,7 +54,7 @@ function floorTexture(finish) {
         x += len;
       }
     }
-  } else {
+  } else if (finish !== 'paper') {
     for (let i = 0; i < 900; i++) {
       ctx.fillStyle = rnd() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)';
       ctx.beginPath();

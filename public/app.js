@@ -7,6 +7,7 @@ const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
 const FRAMES = ['16:9', '4:5', '1:1', '9:16'];
 const PRODUCT_CATS = ['Cleanser', 'Sunscreen', 'Serum', 'Moisturiser', 'Mask', 'Makeup', 'Bundle', 'Other'];
 const MOODS = [
+  { name: 'BTY studio', say: 'White sweep, white blocks, soft glow', colors: ['#f4f3f1', '#d9d7d3', '#e0626b'] },
   { name: 'Clean minimal', say: 'Bright, airy, lots of space', colors: ['#f2f0ec', '#dcd8d1', '#9aa3a8'] },
   { name: 'Warm cozy', say: 'Soft, golden, homely', colors: ['#e9d3b4', '#c98a4b', '#7a4a2b'] },
   { name: 'Moody dark', say: 'Deep shadows, strong rim light', colors: ['#1d1f24', '#3b4a5a', '#c2542d'] },
