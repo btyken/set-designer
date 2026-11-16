@@ -240,7 +240,7 @@ function renderItems() {
     b.querySelector('span').textContent = n ? ` ${n}` : '';
   }
   $('libSay').textContent = prod
-    ? 'Register each BTY Advance product once. Its real photo is used in every mockup, so the label is never redrawn.'
+    ? 'Register each BTY Advance product once. Its real photo is used in every mockup, so the label is never redrawn. For a clean cut-out, shoot it against a backdrop darker than the packaging.'
     : 'Photograph each prop once, then tell the app how tall it is. It works out the rest.';
   $('sampleBtn').hidden = prod;
   $('itemGrid').replaceChildren(...list.map((it) => itemCard(it, prod)));
@@ -361,7 +361,7 @@ async function analyseItem(it) {
 async function addPhoto(file) {
   const prod = state.tab === 'products';
   // Products keep a sharper photo because they are the hero of every mockup.
-  const m = await openMeasure(file, { max: prod ? 1024 : 512 });
+  const m = await openMeasure(file, { max: prod ? 1024 : 512, strict: prod });
   if (!m) return;
   const it = { id: newId(), shape: m.w > m.h * 2.5 ? 'flat' : 'box', named: false, ...m };
   delete it.hero;

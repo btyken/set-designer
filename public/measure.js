@@ -87,11 +87,12 @@ export function cropToThumb(source, box, max = 512) {
 }
 
 /**
- * Finds the item in a photo taken against a plain background. Returns its
- * bounding box in source pixels, or null when nothing clear stands out.
+ * Marks the background of a photo taken against a plain backdrop. Works on a small copy,
+ * where the item's outline is a sharp step even when the item is nearly the backdrop's
+ * colour (white packaging on white paper). Returns { bg, w, h, k }: bg[p] is 1 for background.
  */
-export function findItemBox(source) {
-  const k = Math.min(1, 240 / Math.max(source.width, source.height));
+function backgroundMask(source, maxSide, STEP) {
+  const k = Math.min(1, maxSide / Math.max(source.width, source.height));
   const w = Math.max(8, Math.round(source.width * k));
   const h = Math.max(8, Math.round(source.height * k));
   const c = document.createElement('canvas');
@@ -117,7 +118,7 @@ export function findItemBox(source) {
       stack.push(p);
     }
   }
-  const STEP = 14; // largest colour step between neighbours that still reads as background
+  // STEP is the largest colour step between neighbours that still reads as background.
   const spread = (p, from) => {
     if (bg[p]) return;
     const i = p * 4;
@@ -134,9 +135,111 @@ export function findItemBox(source) {
     if (p >= w) spread(p - w, p);
     if (p < w * (h - 1)) spread(p + w, p);
   }
+  return { bg, w, h, k };
+}
+
+/**
+ * Cuts the item out of the photo. The background is found in a padded area around the
+ * box, so the backdrop (not the item) is what touches the edges. Returns a PNG data URL
+ * the size of the thumbnail, or null when the item cannot be separated.
+ */
+export function cutoutInBox(source, box, max = 512, strict = false) {
+  const padX = box.w * 0.18;
+  const padY = box.h * 0.18;
+  const x0 = Math.max(0, Math.floor(box.x - padX));
+  const y0 = Math.max(0, Math.floor(box.y - padY));
+  const x1 = Math.min(source.width, Math.ceil(box.x + box.w + padX));
+  const y1 = Math.min(source.height, Math.ceil(box.y + box.h + padY));
+  const area = document.createElement('canvas');
+  area.width = x1 - x0;
+  area.height = y1 - y0;
+  if (area.width < 16 || area.height < 16) return null;
+  area.getContext('2d').drawImage(source, x0, y0, area.width, area.height, 0, 0, area.width, area.height);
+  const { bg, w, h, k } = backgroundMask(area, 360, 8);
+
+  const mask = document.createElement('canvas');
+  mask.width = w;
+  mask.height = h;
+  const mctx = mask.getContext('2d');
+  const md = mctx.createImageData(w, h);
+  for (let p = 0; p < bg.length; p++) {
+    md.data[p * 4] = md.data[p * 4 + 1] = md.data[p * 4 + 2] = 255;
+    md.data[p * 4 + 3] = bg[p] ? 0 : 255;
+  }
+  mctx.putImageData(md, 0, 0);
+
+  const out = cropToThumb(source, box, max);
+  const ctx = out.getContext('2d', { willReadFrequently: true });
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(mask, (box.x - x0) * k, (box.y - y0) * k, box.w * k, box.h * k, 0, 0, out.width, out.height);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // The scaled-up mask has a wide soft edge. Tighten it to a couple of pixels.
+  const img = ctx.getImageData(0, 0, out.width, out.height);
+  const d = img.data;
+  let kept = 0;
+  for (let i = 3; i < d.length; i += 4) {
+    const a = Math.min(255, Math.max(0, (d[i] - 96) * 4));
+    d[i] = a;
+    if (a > 127) kept++;
+  }
+  const W = out.width;
+  const H = out.height;
+  const share = kept / (W * H);
+  if (share < 0.1 || share > 0.97) return null;
+
+  if (!strict) {
+    ctx.putImageData(img, 0, 0);
+    return out.toDataURL('image/png');
+  }
+  // Trust check, used for products. On white packaging against a white backdrop the
+  // background search leaks into the item and leaves holes or missing ends. A sound cut-out
+  // is nearly solid inside its own outline and reaches all four sides of the box. Anything
+  // less is rejected so the untouched full photo is used instead of a damaged product.
+  const on = (x, y) => d[(y * W + x) * 4 + 3] > 127;
+  const rowMin = new Int32Array(H).fill(W);
+  const rowMax = new Int32Array(H).fill(-1);
+  const colMin = new Int32Array(W).fill(H);
+  const colMax = new Int32Array(W).fill(-1);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!on(x, y)) continue;
+      if (x < rowMin[y]) rowMin[y] = x;
+      if (x > rowMax[y]) rowMax[y] = x;
+      if (y < colMin[x]) colMin[x] = y;
+      if (y > colMax[x]) colMax[x] = y;
+    }
+  }
+  let outline = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = rowMin[y]; x <= rowMax[y]; x++) if (y >= colMin[x] && y <= colMax[x]) outline++;
+  }
+  if (kept / Math.max(outline, 1) < 0.9) return null;
+  const band = (x0, y0, x1, y1) => {
+    let n = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (on(x, y)) n++;
+    return n / Math.max((x1 - x0) * (y1 - y0), 1);
+  };
+  const bx = Math.max(2, Math.round(W * 0.1));
+  const by = Math.max(2, Math.round(H * 0.1));
+  if (Math.min(band(0, 0, W, by), band(0, H - by, W, H), band(0, 0, bx, H), band(W - bx, 0, W, H)) < 0.12) return null;
+  ctx.putImageData(img, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+/**
+ * Finds the item in a photo taken against a plain background. Returns its
+ * bounding box in source pixels, or null when nothing clear stands out.
+ */
+export function findItemBox(source, STEP = 8) {
+  const { bg, w, h, k } = backgroundMask(source, 240, STEP);
+  const stack = [];
 
   // The largest connected patch that is not background is the item.
   let best = null;
+  const parts = [];
   for (let start = 0; start < bg.length; start++) {
     if (bg[start]) continue;
     const box = { n: 0, x0: w, y0: h, x1: 0, y1: 0 };
@@ -158,7 +261,25 @@ export function findItemBox(source) {
         }
       }
     }
+    parts.push(box);
     if (!best || box.n > best.n) best = box;
+  }
+  // A pump or cap can separate from the body where its colour is close to the backdrop.
+  // Pieces sitting directly above the main piece belong to it. Pieces below are reflections.
+  if (best) {
+    best = { ...best };
+    const main = { ...best };
+    const mw = main.x1 - main.x0 + 1;
+    parts.sort((a, b) => b.y1 - a.y1); // nearest piece first, so a stack of pieces chains upward
+    for (const part of parts) {
+      if (part === best || part.n < main.n * 0.004 || part.y1 >= main.y0 + (main.y1 - main.y0) * 0.25) continue;
+      const cx = (part.x0 + part.x1) / 2;
+      if (cx < main.x0 - mw * 0.15 || cx > main.x1 + mw * 0.15) continue;
+      if (best.y0 - part.y1 > h * 0.06) continue;
+      best.x0 = Math.min(best.x0, part.x0);
+      best.x1 = Math.max(best.x1, part.x1);
+      best.y0 = Math.min(best.y0, part.y0);
+    }
   }
   if (!best || best.n < w * h * 0.008) return null;
   const bw = best.x1 - best.x0 + 1;
@@ -173,7 +294,7 @@ export function findItemBox(source) {
 }
 
 /** Opens the sizing screen for a photo. Resolves to item fields, or null if cancelled. */
-export async function openMeasure(file, { max = 512 } = {}) {
+export async function openMeasure(file, { max = 512, strict = false } = {}) {
   const img = await loadImage(file);
   const k = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
   const src = document.createElement('canvas');
@@ -473,7 +594,7 @@ export async function openMeasure(file, { max = 512 } = {}) {
         hero: false,
         colors: dominantColors(thumb),
         thumb: thumb.toDataURL('image/jpeg', max > 512 ? 0.92 : 0.85),
-        cut: makeCutout(thumb),
+        cut: cutoutInBox(src, boxRect(), max, strict),
       });
     });
     fit();
