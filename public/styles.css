@@ -209,14 +209,20 @@ html.locked, html.locked body { overflow: hidden; }
 .measure-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
 .measure-top .seg { flex: 1; display: flex; max-width: 420px; margin-left: auto; }
 .measure-top .seg button { flex: 1; min-height: 44px; padding: 6px 8px; }
-.hint { padding: 8px 12px; color: var(--ink); font-size: 14px; font-weight: 500; line-height: 1.35; min-height: 54px; display: flex; align-items: center; }
+.measure-row { display: flex; align-items: flex-end; gap: 10px; padding: 8px 12px 0; }
+.measure-row select { flex: 1; min-width: 0; }
+.sizefield { flex: 0 0 116px; }
+.chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 12px 2px 0; margin-right: -12px; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; min-width: 48px; min-height: 44px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--raised); cursor: pointer; font: 500 15px var(--mono); }
+.chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.hint { padding: 8px 12px; color: var(--ink); font-size: 14px; font-weight: 500; line-height: 1.35; min-height: 52px; display: flex; align-items: center; }
 .measure-stage { flex: 1; min-height: 0; display: grid; place-items: center; background: var(--studio); overflow: hidden; }
 .measure-stage canvas { touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .measure-bottom { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--rule); }
-.measure-bottom .ref { flex: 1 1 200px; }
 #mRefCustom { width: 96px; }
 #mSave { flex: 1 1 180px; min-height: 52px; }
-#mReset { min-height: 52px; }
+#mReset { min-height: 44px; }
 
 /* Mockups */
 h2.sub { margin: 28px 0 12px; padding-top: 18px; border-top: 1px solid var(--rule); }
@@ -300,7 +306,6 @@ h2.sub { margin: 28px 0 12px; padding-top: 18px; border-top: 1px solid var(--rul
   .bar .btn { min-height: 52px; }
   #barNext { flex: 1; font-size: 17px; }
 
-  .measure-bottom .ref { flex: 1 1 100%; }
   .lightbox { padding: calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom)); }
   .lightbox-bar strong { font-size: 22px; }
 }

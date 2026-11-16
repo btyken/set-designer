@@ -1,4 +1,4 @@
-// Photo measuring: mark a reference object of known length, then box the item.
+// Photo sizing: the app boxes the item, then a typed height (or a card of known length) gives the scale.
 import { rgbToHex } from './rules.js';
 
 const $ = (id) => document.getElementById(id);
@@ -57,7 +57,93 @@ export function cropToThumb(source, box, max = 512) {
   return out;
 }
 
-/** Opens the measuring screen for a photo. Resolves to item fields, or null if cancelled. */
+/**
+ * Finds the item in a photo taken against a plain background. Returns its
+ * bounding box in source pixels, or null when nothing clear stands out.
+ */
+export function findItemBox(source) {
+  const k = Math.min(1, 240 / Math.max(source.width, source.height));
+  const w = Math.max(8, Math.round(source.width * k));
+  const h = Math.max(8, Math.round(source.height * k));
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(source, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+
+  // Background seeds: edge pixels whose colour is common along the photo's edge
+  // (the wall, a table top). An item that touches the edge is too small a share to count.
+  const edge = [];
+  for (let x = 0; x < w; x++) edge.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) edge.push(y * w, y * w + w - 1);
+  const bucket = (p) => ((d[p * 4] >> 5) << 6) | ((d[p * 4 + 1] >> 5) << 3) | (d[p * 4 + 2] >> 5);
+  const counts = new Map();
+  for (const p of edge) counts.set(bucket(p), (counts.get(bucket(p)) || 0) + 1);
+  const bg = new Uint8Array(w * h);
+  const stack = [];
+  for (const p of edge) {
+    if (counts.get(bucket(p)) >= edge.length * 0.1 && !bg[p]) {
+      bg[p] = 1;
+      stack.push(p);
+    }
+  }
+  const STEP = 14; // largest colour step between neighbours that still reads as background
+  const spread = (p, from) => {
+    if (bg[p]) return;
+    const i = p * 4;
+    const j = from * 4;
+    if (Math.hypot(d[i] - d[j], d[i + 1] - d[j + 1], d[i + 2] - d[j + 2]) > STEP) return;
+    bg[p] = 1;
+    stack.push(p);
+  };
+  while (stack.length) {
+    const p = stack.pop();
+    const x = p % w;
+    if (x > 0) spread(p - 1, p);
+    if (x < w - 1) spread(p + 1, p);
+    if (p >= w) spread(p - w, p);
+    if (p < w * (h - 1)) spread(p + w, p);
+  }
+
+  // The largest connected patch that is not background is the item.
+  let best = null;
+  for (let start = 0; start < bg.length; start++) {
+    if (bg[start]) continue;
+    const box = { n: 0, x0: w, y0: h, x1: 0, y1: 0 };
+    bg[start] = 2;
+    stack.push(start);
+    while (stack.length) {
+      const p = stack.pop();
+      const x = p % w;
+      const y = (p - x) / w;
+      box.n++;
+      if (x < box.x0) box.x0 = x;
+      if (x > box.x1) box.x1 = x;
+      if (y < box.y0) box.y0 = y;
+      if (y > box.y1) box.y1 = y;
+      for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p - w, p + w]) {
+        if (q >= 0 && q < bg.length && !bg[q]) {
+          bg[q] = 2;
+          stack.push(q);
+        }
+      }
+    }
+    if (!best || box.n > best.n) best = box;
+  }
+  if (!best || best.n < w * h * 0.008) return null;
+  const bw = best.x1 - best.x0 + 1;
+  const bh = best.y1 - best.y0 + 1;
+  if (bw > w * 0.96 && bh > h * 0.96) return null;
+  return {
+    x0: Math.max(0, (best.x0 - 1) / k),
+    y0: Math.max(0, (best.y0 - 1) / k),
+    x1: Math.min(source.width, (best.x1 + 2) / k),
+    y1: Math.min(source.height, (best.y1 + 2) / k),
+  };
+}
+
+/** Opens the sizing screen for a photo. Resolves to item fields, or null if cancelled. */
 export async function openMeasure(file) {
   const img = await loadImage(file);
   const k = Math.min(1, MAX_SIDE / Math.max(img.width, img.height));
@@ -73,7 +159,14 @@ export async function openMeasure(file) {
   canvas.width = src.width;
   canvas.height = src.height;
 
-  const st = { mode: 'ref', pts: [], box: null, drag: null, loupe: null };
+  // mode 'size': the box gives the proportions and a typed height gives the scale.
+  // mode 'card': two dots on a card of known length give the scale.
+  const found = findItemBox(src);
+  const st = {
+    mode: 'size', pts: [], drag: null, loupe: null, auto: Boolean(found),
+    box: found || { x0: src.width * 0.2, y0: src.height * 0.15, x1: src.width * 0.8, y1: src.height * 0.85 },
+  };
+  $('mSize').value = '';
   overlay.hidden = false;
   document.documentElement.classList.add('locked');
 
@@ -90,11 +183,17 @@ export async function openMeasure(file) {
     w: Math.abs(st.box.x1 - st.box.x0),
     h: Math.abs(st.box.y1 - st.box.y0),
   };
+  const r1 = (v) => Math.round(v * 10) / 10;
   const size = () => {
-    const ppc = pxPerCm();
     const b = boxRect();
-    if (!ppc || !b || b.w < 8 || b.h < 8) return null;
-    return { w: Math.round((b.w / ppc) * 10) / 10, h: Math.round((b.h / ppc) * 10) / 10 };
+    if (!b || b.w < 8 || b.h < 8) return null;
+    if (st.mode === 'size') {
+      const tall = Number($('mSize').value);
+      if (!(tall >= 0.5 && tall <= 400)) return null;
+      return { w: r1((tall * b.w) / b.h), h: r1(tall) };
+    }
+    const ppc = pxPerCm();
+    return ppc ? { w: r1(b.w / ppc), h: r1(b.h / ppc) } : null;
   };
 
   function fit() {
@@ -126,8 +225,7 @@ export async function openMeasure(file) {
     const u = unit();
     const shown = canvas.getBoundingClientRect().width;
     const R = Math.min(64, shown * 0.2) * u;
-    const zoom = 2.4;
-    const half = R / zoom;
+    const half = R / 2.4;
     const onLeft = !(p.x < canvas.width / 2 && p.y < R * 2 + 30 * u);
     const cx = onLeft ? R + 10 * u : canvas.width - R - 10 * u;
     const cy = R + 10 * u;
@@ -137,7 +235,6 @@ export async function openMeasure(file) {
     ctx.clip();
     ctx.fillStyle = '#14110f';
     ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(src, p.x - half, p.y - half, half * 2, half * 2, cx - R, cy - R, R * 2, R * 2);
     ctx.strokeStyle = 'rgba(255,255,255,0.95)';
     ctx.lineWidth = 1.5 * u;
@@ -168,21 +265,19 @@ export async function openMeasure(file) {
       ctx.strokeStyle = '#7ee0c3';
       ctx.lineWidth = 2.5 * u;
       ctx.strokeRect(b.x, b.y, b.w, b.h);
-      if (st.mode === 'box') {
-        for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
-          ctx.fillStyle = '#7ee0c3';
-          ctx.beginPath();
-          ctx.arc(x, y, 9 * u, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#14110f';
-          ctx.lineWidth = 2 * u;
-          ctx.stroke();
-        }
+      for (const [x, y] of [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]]) {
+        ctx.fillStyle = '#7ee0c3';
+        ctx.beginPath();
+        ctx.arc(x, y, 9 * u, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#14110f';
+        ctx.lineWidth = 2 * u;
+        ctx.stroke();
       }
       const sz = size();
       if (sz) label(`${sz.w} × ${sz.h} cm`, b.x + b.w / 2, b.y + b.h + 22 * u, '#7ee0c3');
     }
-    if (st.pts.length) {
+    if (st.mode === 'card' && st.pts.length) {
       ctx.strokeStyle = '#ffc857';
       ctx.lineWidth = 3 * u;
       if (st.pts.length === 2) {
@@ -193,9 +288,9 @@ export async function openMeasure(file) {
         if (!st.drag) label(`${refLength()} cm`, (st.pts[0].x + st.pts[1].x) / 2, (st.pts[0].y + st.pts[1].y) / 2 - 18 * u, '#ffc857');
       }
       for (const p of st.pts) {
-        ctx.fillStyle = st.mode === 'ref' ? 'rgba(255,200,87,0.35)' : '#ffc857';
+        ctx.fillStyle = 'rgba(255,200,87,0.35)';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, (st.mode === 'ref' ? 13 : 6) * u, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 13 * u, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#ffc857';
         ctx.lineWidth = 2 * u;
@@ -211,22 +306,25 @@ export async function openMeasure(file) {
   }
 
   function updateUi() {
-    $('mModeRef').setAttribute('aria-pressed', String(st.mode === 'ref'));
-    $('mModeBox').setAttribute('aria-pressed', String(st.mode === 'box'));
+    const card = st.mode === 'card';
+    $('mModeSize').setAttribute('aria-pressed', String(!card));
+    $('mModeCard').setAttribute('aria-pressed', String(card));
+    $('mSizeRow').hidden = card;
+    $('mCardRow').hidden = !card;
     $('mRefCustom').hidden = $('mRef').value !== 'custom';
+    $('mReset').disabled = !st.pts.length;
+    const typed = Number($('mSize').value);
+    for (const chip of $('mChips').children) chip.setAttribute('aria-pressed', String(Number(chip.dataset.v) === typed));
     const sz = size();
     $('mSave').disabled = !sz;
     $('mSave').textContent = sz ? `Save item · ${sz.w} × ${sz.h} cm` : 'Save item';
-    $('mReset').disabled = !st.pts.length && !st.box;
-    $('mHint').textContent = st.mode === 'ref'
-      ? st.pts.length === 0 ? 'Touch one end of the card’s long edge. Slide your finger to place the dot exactly.'
+    const boxSay = st.auto ? 'The app found your item. Now' : 'Drag the corners so the box fits the item, then';
+    $('mHint').textContent = !card
+      ? sz ? 'Looks good? Save it. Drag a corner if the box is off.'
+        : `${boxSay} pick or type its height. A rough guess is fine.`
+      : st.pts.length === 0 ? 'Touch one end of the card’s long edge and slide to place the dot.'
         : st.pts.length === 1 ? 'Now touch the other end of the same edge.'
-          : 'Card marked. Drag a dot to adjust, or go to 2 Item.'
-      : sz
-        ? 'Drag a corner to tighten the box, or drag inside it to move it.'
-        : st.pts.length < 2
-          ? 'Mark the card first (1 Card) so the size can be worked out.'
-          : 'Drag a box around the item, from one corner to the opposite corner.';
+          : 'Card marked. Drag a corner if the box does not fit the item.';
   }
 
   const pos = (e) => {
@@ -241,21 +339,20 @@ export async function openMeasure(file) {
   function down(e) {
     if (st.drag) return; // ignore a second finger
     e.preventDefault();
+    document.activeElement?.blur?.(); // put the keyboard away
     try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
     const p = pos(e);
     const grab = GRAB * unit();
     st.loupe = p;
-    if (st.mode === 'ref') {
+    if (st.mode === 'card') {
       const near = st.pts.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < grab);
       if (near >= 0) st.drag = { pt: near };
       else if (st.pts.length < 2) {
         st.pts.push(p);
         st.drag = { pt: st.pts.length - 1 };
-      } else {
-        st.pts = [p];
-        st.drag = { pt: 0 };
       }
-    } else {
+    }
+    if (!st.drag) {
       const b = boxRect();
       const corner = b && [['x0', 'y0'], ['x1', 'y0'], ['x0', 'y1'], ['x1', 'y1']]
         .map(([xk, yk]) => ({ xk, yk, dist: Math.hypot(st.box[xk] - p.x, st.box[yk] - p.y) }))
@@ -295,12 +392,10 @@ export async function openMeasure(file) {
   }
   function up(e) {
     if (!st.drag || (e && e.pointerId !== st.drag.id)) return;
-    const wasRef = 'pt' in st.drag;
     st.drag = null;
     st.loupe = null;
     const b = boxRect();
     if (b) st.box = b.w < 8 || b.h < 8 ? null : { x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h };
-    if (wasRef && st.pts.length === 2 && !st.box) st.mode = 'box';
     draw();
   }
 
@@ -321,11 +416,19 @@ export async function openMeasure(file) {
     on(canvas, 'pointerup', up);
     on(canvas, 'pointercancel', up);
     on(canvas, 'contextmenu', (e) => e.preventDefault());
-    on($('mModeRef'), 'click', () => { st.mode = 'ref'; draw(); });
-    on($('mModeBox'), 'click', () => { st.mode = 'box'; draw(); });
+    on($('mModeSize'), 'click', () => { st.mode = 'size'; draw(); });
+    on($('mModeCard'), 'click', () => { st.mode = 'card'; draw(); });
+    on($('mSize'), 'input', draw);
+    on($('mSize'), 'keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+    on($('mChips'), 'click', (e) => {
+      const chip = e.target.closest('button');
+      if (!chip) return;
+      $('mSize').value = chip.dataset.v;
+      draw();
+    });
     on($('mRef'), 'change', draw);
     on($('mRefCustom'), 'input', draw);
-    on($('mReset'), 'click', () => { st.mode = 'ref'; st.pts = []; st.box = null; draw(); });
+    on($('mReset'), 'click', () => { st.pts = []; draw(); });
     on($('mCancel'), 'click', () => finish(null));
     on($('mSave'), 'click', () => {
       const sz = size();

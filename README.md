@@ -1,6 +1,6 @@
 # Set Designer
 
-Photograph your props, measure them from a bank card in the shot, and get three room-set designs with lighting plans and photo mockups.
+Photograph your props, tap each one's height (the app finds the item in the photo), and get three room-set designs with lighting plans and photo mockups.
 
 ## Run locally
 

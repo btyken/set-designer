@@ -36,7 +36,7 @@
     <section id="step-items">
       <p class="kicker">Step 1 of 3</p>
       <h1>What do you have to work with?</h1>
-      <p class="lede">Photograph each prop once. The app measures it from a bank card in the same shot.</p>
+      <p class="lede">Photograph each prop once, then tell the app how tall it is. It works out the rest.</p>
 
       <div class="toolbar">
         <label class="btn primary">
@@ -55,9 +55,9 @@
       <details id="how" class="how">
         <summary>How to take the photo</summary>
         <ol class="howto">
-          <li><b>1</b><div><strong>Stand a card beside the item</strong><span>Same distance from the camera as the item, against a plain wall.</span></div></li>
+          <li><b>1</b><div><strong>Use a plain background</strong><span>One item at a time, against a plain wall, with the whole item in the photo.</span></div></li>
           <li><b>2</b><div><strong>Shoot straight-on</strong><span>Lens level with the middle of the item.</span></div></li>
-          <li><b>3</b><div><strong>Mark the card, box the item</strong><span>Two taps and one drag. The size is worked out for you.</span></div></li>
+          <li><b>3</b><div><strong>Pick its height</strong><span>The app finds the item for you. Tap a height, and a rough guess is fine.</span></div></li>
         </ol>
       </details>
 
@@ -169,24 +169,30 @@
     <div class="measure-top">
       <button id="mCancel" class="btn small">Cancel</button>
       <div class="seg">
-        <button id="mModeRef" aria-pressed="true"><b>1</b> Card</button>
-        <button id="mModeBox" aria-pressed="false"><b>2</b> Item</button>
+        <button id="mModeSize" aria-pressed="true">Type the size</button>
+        <button id="mModeCard" aria-pressed="false">Use a card</button>
       </div>
+    </div>
+    <div id="mSizeRow" class="measure-row">
+      <label class="sizefield">Height<span class="unit"><input id="mSize" type="number" min="0.5" max="400" step="0.1" placeholder="?" inputmode="decimal" enterkeyhint="done"><em>cm</em></span></label>
+      <div id="mChips" class="chips" role="group" aria-label="Quick heights in cm">
+        <button type="button" data-v="5">5</button><button type="button" data-v="10">10</button><button type="button" data-v="15">15</button><button type="button" data-v="20">20</button><button type="button" data-v="30">30</button><button type="button" data-v="40">40</button><button type="button" data-v="60">60</button><button type="button" data-v="80">80</button><button type="button" data-v="100">100</button><button type="button" data-v="150">150</button>
+      </div>
+    </div>
+    <div id="mCardRow" class="measure-row" hidden>
+      <select id="mRef" aria-label="What you marked">
+        <option value="8.56">Bank card, long edge (8.56 cm)</option>
+        <option value="5.4">Bank card, short edge (5.4 cm)</option>
+        <option value="29.7">A4 paper, long edge (29.7 cm)</option>
+        <option value="21">A4 paper, short edge (21 cm)</option>
+        <option value="custom">Other length…</option>
+      </select>
+      <input id="mRefCustom" type="number" min="0.5" step="0.1" placeholder="cm" inputmode="decimal" aria-label="Reference length in cm" hidden>
+      <button id="mReset" class="btn small">Redo dots</button>
     </div>
     <p id="mHint" class="hint" role="status"></p>
     <div id="measureStage" class="measure-stage"><canvas id="measureCanvas"></canvas></div>
     <div class="measure-bottom">
-      <label class="ref">What you marked
-        <select id="mRef">
-          <option value="8.56">Bank card, long edge (8.56 cm)</option>
-          <option value="5.4">Bank card, short edge (5.4 cm)</option>
-          <option value="29.7">A4 paper, long edge (29.7 cm)</option>
-          <option value="21">A4 paper, short edge (21 cm)</option>
-          <option value="custom">Other length…</option>
-        </select>
-      </label>
-      <input id="mRefCustom" type="number" min="0.5" step="0.1" placeholder="cm" inputmode="decimal" aria-label="Reference length in cm" hidden>
-      <button id="mReset" class="btn">Start over</button>
       <button id="mSave" class="btn primary" disabled>Save item</button>
     </div>
   </div>
