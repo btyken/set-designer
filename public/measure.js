@@ -22,11 +22,11 @@ const REFS = [
 ];
 // Pictures share one scale so bigger items look bigger. It is a compressed scale:
 // at true scale the lipstick would be 2 px beside the shelf.
-const PIC_MAX = 60;
+const PIC_MAX = 96;
 function buildChips() {
   const top = REFS[REFS.length - 1].cm;
   $('mChips').innerHTML = REFS.map((r) => {
-    const hpx = Math.round(PIC_MAX * (r.cm / top) ** 0.4 * 10) / 10;
+    const hpx = Math.round(PIC_MAX * (r.cm / top) ** 0.35 * 10) / 10;
     const wpx = Math.round(hpx * (r.w / r.cm) * 10) / 10;
     return `<button type="button" data-v="${r.cm}"><i><svg viewBox="0 0 ${r.w} ${r.cm}" width="${wpx}" height="${hpx}" aria-hidden="true">${r.art}</svg></i><b>${r.name}</b><span>${r.cm} cm</span></button>`;
   }).join(''); // static markup from the list above, never user text

@@ -219,7 +219,7 @@ html.locked, html.locked body { overflow: hidden; }
 .chips button { flex: none; min-height: 50px; padding: 5px 14px; border: 1px solid var(--rule-strong); border-radius: var(--r-md); background: var(--raised); cursor: pointer; display: grid; justify-items: start; line-height: 1.25; text-align: left; }
 .chips button { --cut: var(--raised); min-width: 76px; padding: 6px 12px; }
 .chips button[aria-pressed="true"] { --cut: var(--ink); }
-.chips button i { height: 62px; display: flex; align-items: flex-end; margin-bottom: 4px; color: var(--ink); }
+.chips button i { height: 98px; display: flex; align-items: flex-end; margin-bottom: 4px; color: var(--ink); }
 .chips button[aria-pressed="true"] i { color: var(--paper); }
 .chips svg { display: block; overflow: visible; }
 .chips .c { fill: currentColor; }
