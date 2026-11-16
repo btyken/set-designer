@@ -4,6 +4,35 @@ import { rgbToHex } from './rules.js';
 const $ = (id) => document.getElementById(id);
 const MAX_SIDE = 1800;
 
+// Everyday items used as height references, smallest to biggest. Each drawing is
+// in centimetres: `w` wide and `cm` tall. `c` = solid, `k` = cut-out detail.
+const REFS = [
+  { name: 'Lipstick', cm: 7, w: 2.2, art: '<rect class="c" y="3.4" width="2.2" height="3.6" rx=".2"/><rect class="c" x=".2" y="2.5" width="1.8" height=".7" opacity=".6"/><path class="c" d="M.5 2.5V1L1.7.2v2.3z"/>' },
+  { name: 'Coffee mug', cm: 10, w: 12.6, art: '<rect class="c" width="9.5" height="10" rx="1"/><path d="M9.5 2.6h.9a1.7 1.7 0 0 1 1.7 1.7v1.4a1.7 1.7 0 0 1-1.7 1.7h-.9" fill="none" stroke="currentColor" stroke-width="1.1"/>' },
+  { name: 'Soda can', cm: 12, w: 6.6, art: '<rect class="c" y=".5" width="6.6" height="11.5" rx="1"/><rect class="c" x=".7" width="5.2" height="1" rx=".3"/><rect class="k" y="4" width="6.6" height="3.4"/>' },
+  { name: 'iPhone', cm: 15, w: 7.2, art: '<rect class="c" width="7.2" height="15" rx="1.2"/><rect class="k" x=".6" y=".6" width="6" height="13.8" rx=".8"/><rect class="c" x="2.5" y="1.1" width="2.2" height=".7" rx=".35"/>' },
+  { name: 'Water bottle', cm: 21, w: 6.5, art: '<rect class="c" x="2" width="2.5" height="1.5" rx=".3"/><path class="c" d="M2.2 1.8h2.1C4.5 4 6.5 4.5 6.5 7v13a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V7c0-2.5 2-3 2.2-5.2z"/><rect class="k" y="10" width="6.5" height="4.5"/>' },
+  { name: 'Aquaflask', cm: 27, w: 8, art: '<rect class="c" x="1.6" width="4.8" height="3" rx=".7"/><rect class="k" x="2.8" y=".8" width="2.4" height="1.1" rx=".5"/><path class="c" d="M1.2 3.4h5.6C7.6 5 8 6 8 8v18a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V8c0-2 .4-3 1.2-4.6z"/><rect class="k" y="22.4" width="8" height=".6"/>' },
+  { name: 'A4 paper', cm: 30, w: 21, art: '<rect class="c" width="21" height="30" rx=".6"/><rect class="k" x="1.2" y="1.2" width="18.6" height="27.6"/><rect class="c" x="4" y="6" width="13" height="1"/><rect class="c" x="4" y="10" width="13" height="1"/><rect class="c" x="4" y="14" width="9" height="1"/>' },
+  { name: '1.5 L bottle', cm: 33, w: 9.5, art: '<rect class="c" x="3.3" width="2.9" height="1.8" rx=".3"/><path class="c" d="M3.4 2.1h2.7c.2 5 3.4 6 3.4 10v20a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V12.1c0-4 3.2-5 3.4-10z"/><rect class="k" y="15" width="9.5" height="7"/>' },
+  { name: 'Stool', cm: 45, w: 36, art: '<rect class="c" x="2" width="32" height="4.5" rx="1.2"/><path class="c" d="M5 4.5h4L4 45H0zM27 4.5h4L36 45h-4z"/><rect class="c" x="5" y="26" width="26" height="2.6"/>' },
+  { name: 'Table', cm: 75, w: 120, art: '<rect class="c" width="120" height="6" rx="1"/><rect class="c" x="6" y="6" width="6" height="69"/><rect class="c" x="108" y="6" width="6" height="69"/>' },
+  { name: 'Stand fan', cm: 120, w: 46, art: '<circle class="c" cx="23" cy="23" r="23"/><circle class="k" cx="23" cy="23" r="18.5"/><path d="M23 6v34M6 23h34" stroke="currentColor" stroke-width="3"/><circle class="c" cx="23" cy="23" r="6"/><rect class="c" x="21" y="45" width="4" height="70"/><ellipse class="c" cx="23" cy="116.5" rx="19" ry="3.5"/>' },
+  { name: 'Shelf', cm: 180, w: 80, art: '<rect class="c" width="80" height="180" rx="1"/><rect class="k" x="4" y="4" width="72" height="31"/><rect class="k" x="4" y="39" width="72" height="31"/><rect class="k" x="4" y="74" width="72" height="31"/><rect class="k" x="4" y="109" width="72" height="31"/><rect class="k" x="4" y="144" width="72" height="32"/>' },
+];
+// Pictures share one scale so bigger items look bigger. It is a compressed scale:
+// at true scale the lipstick would be 2 px beside the shelf.
+const PIC_MAX = 60;
+function buildChips() {
+  const top = REFS[REFS.length - 1].cm;
+  $('mChips').innerHTML = REFS.map((r) => {
+    const hpx = Math.round(PIC_MAX * (r.cm / top) ** 0.4 * 10) / 10;
+    const wpx = Math.round(hpx * (r.w / r.cm) * 10) / 10;
+    return `<button type="button" data-v="${r.cm}"><i><svg viewBox="0 0 ${r.w} ${r.cm}" width="${wpx}" height="${hpx}" aria-hidden="true">${r.art}</svg></i><b>${r.name}</b><span>${r.cm} cm</span></button>`;
+  }).join(''); // static markup from the list above, never user text
+}
+buildChips();
+
 async function loadImage(file) {
   try {
     return await createImageBitmap(file, { imageOrientation: 'from-image' });
