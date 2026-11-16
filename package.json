@@ -1,0 +1,22 @@
+{
+  "name": "set-designer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --env-file-if-exists=.env server.js",
+    "build": "node scripts/build-static.mjs",
+    "deploy": "sh scripts/deploy.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "three": "^0.187.0",
+    "zod": "^4.6.7"
+  },
+  "private": true
+}

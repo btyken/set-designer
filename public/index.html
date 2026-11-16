@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f8f8">
+  <title>Set Designer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600&family=Alumni+Sans:wght@200;300;400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/build/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <span class="brand"><i aria-hidden="true"></i>Set Designer</span>
+      <nav class="steps" aria-label="Steps">
+        <button data-step="items" aria-current="true"><span>1</span>Items</button>
+        <button data-step="brief"><span>2</span>Brief</button>
+        <button data-step="designs"><span>3</span>Designs</button>
+      </nav>
+      <span id="brain" class="tag">…</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="step-items">
+      <p class="kicker">Step 1 of 3</p>
+      <h1>What do you have to work with?</h1>
+      <p class="lede">Photograph each prop once. The app measures it from a bank card in the same shot.</p>
+
+      <ol class="howto">
+        <li><b>1</b><div><strong>Stand a card beside the item</strong><span>Same distance from the camera as the item, against a plain wall.</span></div></li>
+        <li><b>2</b><div><strong>Shoot straight-on</strong><span>Lens level with the middle of the item.</span></div></li>
+        <li><b>3</b><div><strong>Mark the card, box the item</strong><span>Two taps and one drag. The size is worked out for you.</span></div></li>
+      </ol>
+
+      <div class="toolbar">
+        <label class="btn primary">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6.5h3l1.2-2h5.6l1.2 2h3v9H3z M10 13.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+          Add a photo
+          <input id="fileInput" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+        <button id="sampleBtn" class="btn">Try with sample items</button>
+        <span id="itemCount" class="count"></span>
+      </div>
+
+      <div id="itemGrid" class="grid"></div>
+      <div id="itemEmpty" class="empty">
+        <strong>No items yet</strong>
+        <span>Add your first photo, or load the sample items to see how it works.</span>
+      </div>
+    </section>
+
+    <section id="step-brief" hidden>
+      <p class="kicker">Step 2 of 3</p>
+      <h1>Describe the set.</h1>
+      <p class="lede">Tell the app about the space, the furniture and the look. It designs the whole set around your items.</p>
+
+      <div class="form">
+        <div class="block">
+          <h2><span>01</span>Set area</h2>
+          <p class="help">The floor space you can dress, measured along the back wall and out toward the camera.</p>
+          <div class="row">
+            <label>Width along the wall<span class="unit"><input id="bW" type="number" min="100" max="800" inputmode="decimal"><em>cm</em></span></label>
+            <label>Depth toward camera<span class="unit"><input id="bD" type="number" min="80" max="600" inputmode="decimal"><em>cm</em></span></label>
+          </div>
+        </div>
+        <div class="block">
+          <h2><span>02</span>Who is in the shot</h2>
+          <div id="people" class="choices" role="radiogroup" aria-label="Who is in the shot"></div>
+        </div>
+        <div class="block">
+          <h2><span>03</span>Furniture you can use</h2>
+          <div id="furn" class="choices four"></div>
+        </div>
+        <div class="block">
+          <h2><span>04</span>Camera</h2>
+          <div id="cams" class="choices" role="radiogroup" aria-label="Camera angle"></div>
+          <div class="frame-row">
+            <span class="muted">Photo shape</span>
+            <div id="frames" class="seg" role="group" aria-label="Photo shape"></div>
+          </div>
+        </div>
+        <div class="block">
+          <h2><span>05</span>Mood</h2>
+          <div id="moods" class="choices moods" role="radiogroup" aria-label="Mood"></div>
+        </div>
+        <div class="block">
+          <h2><span>06</span>Brand colours <small>optional</small></h2>
+          <div id="brand" class="brand-row"></div>
+        </div>
+        <div class="block" id="notesBlock">
+          <h2><span>07</span>Notes <small>optional</small></h2>
+          <label>What is the shoot for?
+            <textarea id="bText" rows="3" placeholder="e.g. Christmas promo, elegant, gold accents"></textarea>
+          </label>
+          <label>Backdrops and surfaces you own
+            <input id="bSurf" type="text" placeholder="e.g. white seamless paper, dark wood board, beige linen">
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section id="step-designs" hidden>
+      <div id="designEmpty" class="empty">
+        <strong>No designs yet</strong>
+        <span>Add your items, describe the set, then generate.</span>
+        <button class="btn primary" data-goto="items">Start with items</button>
+      </div>
+      <div id="designWrap" hidden>
+        <div class="design-head">
+          <div>
+            <p class="kicker">Step 3 of 3 · <span id="sourceChip"></span></p>
+            <h1>Pick a direction.</h1>
+          </div>
+          <button id="regenBtn" class="btn">Generate again</button>
+        </div>
+        <div id="designTabs" class="options" role="tablist"></div>
+        <h2 class="sub"><span>A</span>Photo mockups <small>how the shots could turn out</small></h2>
+        <div id="mockups" class="mockups"></div>
+        <h2 class="sub"><span>B</span>Set plan <small>drag to look around</small></h2>
+        <div class="design">
+          <div class="viewer">
+            <div class="stage"><canvas id="scene"></canvas></div>
+            <div class="viewbar">
+              <div class="seg" role="group" aria-label="View">
+                <button data-view="shot">Camera</button>
+                <button data-view="front">Front</button>
+                <button data-view="top">Plan</button>
+                <button data-view="side">Side</button>
+              </div>
+              <label class="check"><input id="tLabels" type="checkbox" checked> Names</label>
+              <label class="check"><input id="tLights" type="checkbox" checked> Lights</label>
+              <button id="snapBtn" class="btn small">Save view</button>
+            </div>
+          </div>
+          <div id="details" class="details"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="bar" class="bar">
+    <div class="bar-in">
+      <p id="barText" role="status"></p>
+      <button id="barBack" class="btn" hidden>Back</button>
+      <button id="barNext" class="btn primary"></button>
+    </div>
+  </footer>
+
+  <div id="measure" class="overlay" hidden>
+    <div class="measure-top">
+      <strong>Measure this item</strong>
+      <button id="mCancel" class="btn small">Cancel</button>
+    </div>
+    <div class="measure-tools">
+      <div class="seg">
+        <button id="mModeRef" aria-pressed="true"><b>1</b> Mark the card</button>
+        <button id="mModeBox" aria-pressed="false"><b>2</b> Box the item</button>
+      </div>
+      <label class="inline">Reference
+        <select id="mRef">
+          <option value="8.56">Bank card, long edge (8.56 cm)</option>
+          <option value="5.4">Bank card, short edge (5.4 cm)</option>
+          <option value="29.7">A4 paper, long edge (29.7 cm)</option>
+          <option value="21">A4 paper, short edge (21 cm)</option>
+          <option value="custom">Other length…</option>
+        </select>
+      </label>
+      <input id="mRefCustom" type="number" min="0.5" step="0.1" placeholder="cm" inputmode="decimal" aria-label="Reference length in cm" hidden>
+    </div>
+    <p id="mHint" class="hint"></p>
+    <div id="measureStage" class="measure-stage"><canvas id="measureCanvas"></canvas></div>
+    <div class="measure-bottom">
+      <label>Name<input id="mName" type="text" placeholder="Optional"></label>
+      <label>Depth<span class="unit"><input id="mDepth" type="number" min="0.5" step="0.1" placeholder="Same as width" inputmode="decimal"><em>cm</em></span></label>
+      <label class="check"><input id="mHero" type="checkbox"> This is the hero product</label>
+      <button id="mSave" class="btn primary" disabled>Save item</button>
+    </div>
+  </div>
+
+  <div id="gate" class="gate" hidden>
+    <form id="gateForm">
+      <span class="brand"><i aria-hidden="true"></i>Set Designer</span>
+      <label>Team passcode<input id="gateInput" type="password" autocomplete="current-password" required></label>
+      <p id="gateMsg" class="error" role="alert"></p>
+      <button class="btn primary">Enter</button>
+    </form>
+  </div>
+
+  <div id="lightbox" class="lightbox" hidden>
+    <div class="lightbox-bar"><strong id="lbTitle"></strong><span class="grow"></span><a id="lbSave" class="btn small" download>Save image</a><button id="lbClose" class="btn small">Close</button></div>
+    <img id="lbImg" alt="">
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
