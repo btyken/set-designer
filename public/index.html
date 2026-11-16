@@ -57,7 +57,7 @@
         <ol class="howto">
           <li><b>1</b><div><strong>Use a plain background</strong><span>One item at a time, against a plain wall, with the whole item in the photo.</span></div></li>
           <li><b>2</b><div><strong>Shoot straight-on</strong><span>Lens level with the middle of the item.</span></div></li>
-          <li><b>3</b><div><strong>Pick its height</strong><span>The app finds the item for you. Tap a height, and a rough guess is fine.</span></div></li>
+          <li><b>3</b><div><strong>Pick its height</strong><span>The app finds the item for you. Tap something about as tall, like an iPhone or a water bottle.</span></div></li>
         </ol>
       </details>
 
@@ -173,10 +173,10 @@
         <button id="mModeCard" aria-pressed="false">Use a card</button>
       </div>
     </div>
-    <div id="mSizeRow" class="measure-row">
-      <label class="sizefield">Height<span class="unit"><input id="mSize" type="number" min="0.5" max="400" step="0.1" placeholder="?" inputmode="decimal" enterkeyhint="done"><em>cm</em></span></label>
-      <div id="mChips" class="chips" role="group" aria-label="Quick heights in cm">
-        <button type="button" data-v="5">5</button><button type="button" data-v="10">10</button><button type="button" data-v="15">15</button><button type="button" data-v="20">20</button><button type="button" data-v="30">30</button><button type="button" data-v="40">40</button><button type="button" data-v="60">60</button><button type="button" data-v="80">80</button><button type="button" data-v="100">100</button><button type="button" data-v="150">150</button>
+    <div id="mSizeRow" class="measure-row size">
+      <label class="sizefield"><span>About as tall as…</span><span class="unit"><input id="mSize" type="number" min="0.5" max="400" step="0.1" placeholder="or type" inputmode="decimal" enterkeyhint="done" aria-label="Height in cm"><em>cm</em></span></label>
+      <div id="mChips" class="chips" role="group" aria-label="Everyday items for size, smallest to biggest">
+        <button type="button" data-v="7"><b>Lipstick</b><span>7 cm</span></button><button type="button" data-v="10"><b>Coffee mug</b><span>10 cm</span></button><button type="button" data-v="12"><b>Soda can</b><span>12 cm</span></button><button type="button" data-v="15"><b>iPhone</b><span>15 cm</span></button><button type="button" data-v="21"><b>Water bottle</b><span>21 cm</span></button><button type="button" data-v="27"><b>Aquaflask</b><span>27 cm</span></button><button type="button" data-v="30"><b>A4 paper</b><span>30 cm</span></button><button type="button" data-v="33"><b>1.5 L bottle</b><span>33 cm</span></button><button type="button" data-v="45"><b>Chair seat</b><span>45 cm</span></button><button type="button" data-v="75"><b>Table</b><span>75 cm</span></button><button type="button" data-v="100"><b>Door knob</b><span>100 cm</span></button><button type="button" data-v="180"><b>Shelf</b><span>180 cm</span></button>
       </div>
     </div>
     <div id="mCardRow" class="measure-row" hidden>

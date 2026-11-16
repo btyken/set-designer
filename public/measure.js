@@ -321,7 +321,7 @@ export async function openMeasure(file) {
     const boxSay = st.auto ? 'The app found your item. Now' : 'Drag the corners so the box fits the item, then';
     $('mHint').textContent = !card
       ? sz ? 'Looks good? Save it. Drag a corner if the box is off.'
-        : `${boxSay} pick or type its height. A rough guess is fine.`
+        : `${boxSay} tap something about as tall, or type the height.`
       : st.pts.length === 0 ? 'Touch one end of the card’s long edge and slide to place the dot.'
         : st.pts.length === 1 ? 'Now touch the other end of the same edge.'
           : 'Card marked. Drag a corner if the box does not fit the item.';
@@ -424,6 +424,7 @@ export async function openMeasure(file) {
       const chip = e.target.closest('button');
       if (!chip) return;
       $('mSize').value = chip.dataset.v;
+      chip.scrollIntoView({ inline: 'center', block: 'nearest' });
       draw();
     });
     on($('mRef'), 'change', draw);
