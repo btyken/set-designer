@@ -162,6 +162,8 @@ export class SetScene {
     this.D = D;
     this.brief = brief;
     const g = this.group;
+    const k = design.scale || 1; // 1 for a room set, smaller for a tabletop set
+    this.k = k;
     const wallColor = new THREE.Color(design.wall_color);
     this.scene.background = wallColor.clone().multiplyScalar(0.6);
     this.scene.environmentIntensity = ((design.ambient_pct ?? 40) / 100) * 0.55;
@@ -189,7 +191,7 @@ export class SetScene {
       new THREE.MeshStandardMaterial({ color: wallColor.clone().lerp(new THREE.Color('#ffffff'), 0.25), roughness: 0.7 }),
     );
     skirting.position.set(0, 4.5, -D / 2 + 0.8);
-    g.add(skirting);
+    if (design.set_type !== 'tabletop') g.add(skirting);
 
     for (const f of design.furniture || []) g.add(this.furniture(f));
 
@@ -206,8 +208,8 @@ export class SetScene {
       points.push({ centre, it });
       if (it.hero) heroPos = centre;
       const label = labelSprite((it.hero ? '★ ' : '') + (it.name || 'Item'));
-      label.position.set(p.x_cm, p.y_cm + it.h + 9, p.z_cm);
-      this.addLabel(label, 8);
+      label.position.set(p.x_cm, p.y_cm + it.h + 9 * k, p.z_cm);
+      this.addLabel(label, 8 * k);
     }
 
     let personPos = null;
@@ -222,11 +224,11 @@ export class SetScene {
 
     design.lights.forEach((l, i) => {
       const color = new THREE.Color(l.color_hex);
-      const pos = new THREE.Vector3(l.x_cm, Math.max(l.y_cm, 5), l.z_cm);
-      const target = l.aim === 'backdrop' ? new THREE.Vector3(l.x_cm * 0.4, 130, -D / 2)
+      const pos = new THREE.Vector3(l.x_cm, Math.max(l.y_cm, 5 * k), l.z_cm);
+      const target = l.aim === 'backdrop' ? new THREE.Vector3(l.x_cm * 0.4, 130 * k, -D / 2)
         : l.aim === 'person' && personPos ? personPos.clone()
           : l.aim === 'hero' && heroPos ? heroPos.clone()
-            : new THREE.Vector3(0, 80, -D * 0.1);
+            : new THREE.Vector3(0, 80 * k, -D * 0.1);
       const strength = { key: 2.3, fill: 0.7, rim: 2.2, background: 2.4, accent: 2 }[l.role] || 1.8;
       const spot = new THREE.SpotLight(color, (l.intensity_pct / 100) * strength, 0, l.aim === 'backdrop' ? 1.15 : 0.62, 0.9, 0);
       spot.position.copy(pos);
@@ -234,15 +236,15 @@ export class SetScene {
       if (l.role === 'key') {
         spot.castShadow = true;
         spot.shadow.mapSize.set(2048, 2048);
-        spot.shadow.camera.near = 20;
+        spot.shadow.camera.near = 20 * k;
         spot.shadow.camera.far = 1600;
         spot.shadow.bias = -0.0004;
-        spot.shadow.normalBias = 0.6;
+        spot.shadow.normalBias = 0.6 * k;
       }
       g.add(spot, spot.target);
 
       const giz = new THREE.Group();
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color }));
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(6 * k, 16, 12), new THREE.MeshBasicMaterial({ color }));
       bulb.position.copy(pos);
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([pos, target]),
@@ -252,9 +254,9 @@ export class SetScene {
       g.add(giz);
       this.gizmos.push(giz);
       const label = labelSprite(`${i + 1} ${l.name}`, '#' + color.clone().lerp(new THREE.Color('#ffffff'), 0.45).getHexString());
-      label.position.copy(pos).add(new THREE.Vector3(0, 13, 0));
+      label.position.copy(pos).add(new THREE.Vector3(0, 13 * k, 0));
       label.userData.isLight = true;
-      this.addLabel(label, 7);
+      this.addLabel(label, 7 * k);
     });
 
     // The wide shot frames what is actually dressed, not the empty floor.
@@ -268,7 +270,7 @@ export class SetScene {
       box.expandByPoint(p.centre.clone().add(new THREE.Vector3(p.it.w / 2, p.it.h / 2, 0)));
     }
     if (personPos) box.expandByPoint(new THREE.Vector3(personPos.x, design.person.pose === 'seated' ? 140 : 182, personPos.z));
-    if (box.isEmpty()) box.set(new THREE.Vector3(-W / 2, 0, -D / 2), new THREE.Vector3(W / 2, 150, 0));
+    if (box.isEmpty()) box.set(new THREE.Vector3(-W / 2, 0, -D / 2), new THREE.Vector3(W / 2, 150 * k, 0));
     this.bounds = box;
     this.planShots(points, heroPos, personPos);
     this.applyVisibility();
@@ -405,19 +407,21 @@ export class SetScene {
   /** Where the real camera would stand for the main photo. */
   mainCamera(aspect = this.frameAspect()) {
     const b = this.bounds;
+    const k = this.k || 1;
     const size = b.getSize(new THREE.Vector3());
     const mid = b.getCenter(new THREE.Vector3());
     const v = THREE.MathUtils.degToRad(FOV) / 2;
     const hHalf = Math.atan(Math.tan(v) * aspect);
     // Landscape frames fit the full width; tall frames crop the sides and fit the height.
-    const fitW = ((size.x / 2) * (aspect >= 1 ? 1.22 : 0.75)) / Math.tan(hHalf);
+    // A tabletop set is small enough to keep whole, so it is never cropped.
+    const fitW = ((size.x / 2) * (aspect >= 1 ? 1.22 : k < 1 ? 1.1 : 0.75)) / Math.tan(hHalf);
     const fitH = ((size.y / 2) * 1.45) / Math.tan(v);
-    const dist = Math.max(fitW, fitH, 180);
-    const target = new THREE.Vector3(mid.x, Math.max(size.y * 0.5, 60), mid.z);
+    const dist = Math.max(fitW, fitH, 180 * k);
+    const target = new THREE.Vector3(mid.x, Math.max(size.y * 0.5, 60 * k), mid.z);
     const view = this.brief?.camera || 'front';
     const pos = view === 'high' ? target.clone().add(new THREE.Vector3(0, dist * 0.45, dist * 0.9))
       : view === 'angle' ? target.clone().add(new THREE.Vector3(dist * 0.45, dist * 0.1, dist * 0.9))
-        : target.clone().add(new THREE.Vector3(0, 18, dist));
+        : target.clone().add(new THREE.Vector3(0, 18 * k, dist));
     return { pos, target };
   }
 
@@ -427,7 +431,7 @@ export class SetScene {
     const focus = heroPos || points[0]?.centre;
     if (focus) {
       const hero = points.find((p) => p.centre === focus);
-      const dist = Math.max((hero?.it.h || 20) * 3.4, 62);
+      const dist = Math.max((hero?.it.h || 20) * 3.4, 62 * (this.k || 1));
       shots.push({
         name: heroPos ? 'Hero close-up' : 'Close-up',
         note: 'Moved in on the focal piece, slightly off to one side.',
@@ -444,7 +448,7 @@ export class SetScene {
       const others = points.filter((p) => p.centre !== focus);
       if (others.length) {
         const mid = others.reduce((a, p) => a.add(p.centre), new THREE.Vector3()).multiplyScalar(1 / others.length);
-        const dist = Math.max(this.W * 0.75, 170);
+        const dist = Math.max(this.W * 0.75, 170 * (this.k || 1));
         shots.push({
           name: 'Three-quarter view', note: 'From the side, to show depth between the layers.',
           pos: mid.clone().add(new THREE.Vector3(-dist * 0.55, dist * 0.22, dist * 0.8)), target: mid,
@@ -462,9 +466,10 @@ export class SetScene {
       this.camera.position.copy(pos);
       this.controls.target.copy(target);
     } else {
-      const target = new THREE.Vector3(0, view === 'top' ? 0 : 80, -D * 0.1);
+      const k = this.k || 1;
+      const target = new THREE.Vector3(0, view === 'top' ? 0 : 80 * k, -D * 0.1);
       const r = Math.max(W, D);
-      const pos = { front: [0, 110, r * 1.9], top: [0, r * 2.4, target.z + 1], side: [r * 1.5, 190, r * 1.3] }[view] || [0, 110, r * 1.9];
+      const pos = { front: [0, 110 * k, r * 1.9], top: [0, r * 2.4, target.z + 1], side: [r * 1.5, 190 * k, r * 1.3] }[view] || [0, 110 * k, r * 1.9];
       this.camera.position.set(...pos);
       this.controls.target.copy(target);
     }

@@ -25,7 +25,12 @@ const PEOPLE = [
   { id: 'standing', name: 'Person standing', say: 'Leaves a marked spot for a presenter or model', icon: '<path d="M6 31h44"/><circle cx="28" cy="7" r="4"/><path d="M28 11v12M28 23l-5 8M28 23l5 8M21 16h14"/>' },
   { id: 'seated', name: 'Person seated', say: 'Adds a chair, for talking-head shots', icon: '<path d="M6 31h44"/><circle cx="24" cy="7" r="4"/><path d="M24 11v10h9v10M18 14v17M18 22h6"/>' },
 ];
+const SET_TYPES = [
+  { id: 'tabletop', name: 'Tabletop', say: 'Products on a table with small blocks, shot close', icon: '<path d="M4 28h48M12 28v-9h10v9M26 28V12h8v16M38 28v-6h8v6"/>' },
+  { id: 'room', name: 'Room set', say: 'A corner of a room with furniture, room for a person', icon: '<path d="M4 31h48M4 31V6h48v25M12 31V16h9v15M30 31V20h16v11"/>' },
+];
 const DEFAULT_BRIEF = {
+  setType: 'tabletop', tableW: 120, tableD: 70,
   product: null, roomW: 300, roomD: 250, camera: 'front', frame: '16:9', person: 'none',
   furniture: { table: true, shelf: true, plinths: true, side_table: false },
   mood: MOODS[0].name, brand: [], text: '', surfaces: '',
@@ -121,6 +126,13 @@ const saveItems = () => save('items', state.items);
 const saveProducts = () => save('products', state.products);
 const featured = (brief = state.brief) => state.products.find((p) => p.id === brief.product) || null;
 /** Props plus the featured product, in the shape the designer and 3D scene expect. */
+const isTabletop = (brief = state.brief) => brief.setType === 'tabletop';
+/** The brief as the designer sees it: a tabletop set is a small "room" with no person in it. */
+function effectiveBrief() {
+  const b = structuredClone(state.brief);
+  if (isTabletop(b)) Object.assign(b, { roomW: b.tableW, roomD: b.tableD, person: 'none' });
+  return b;
+}
 function designThings(brief = state.brief) {
   const p = featured(brief);
   const things = state.items.map((it) => ({ ...it, hero: false }));
@@ -212,7 +224,7 @@ function renderBar() {
     next.textContent = state.busy ? 'Designing…' : 'Design the set';
     next.disabled = state.busy || total === 0;
     text.textContent = state.message?.text
-      || (total === 0 ? 'Add at least one prop or product first.' : `${hero ? `${hero.name} + ` : ''}${count} in a ${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm set. ${state.brief.mood}.`);
+      || (total === 0 ? 'Add at least one prop or product first.' : `${hero ? `${hero.name} + ` : ''}${count}, ${isTabletop() ? `${fmt(state.brief.tableW)} × ${fmt(state.brief.tableD)} cm tabletop` : `${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm room set`}. ${state.brief.mood}.`);
   }
 }
 
@@ -492,8 +504,17 @@ async function backfillCutouts() {
 
 function renderBrief() {
   const b = state.brief;
-  $('bW').value = b.roomW;
-  $('bD').value = b.roomD;
+  const tt = isTabletop(b);
+  $('bW').value = tt ? b.tableW : b.roomW;
+  $('bD').value = tt ? b.tableD : b.roomD;
+  $('areaTitle').textContent = tt ? 'Table size' : 'Set area';
+  $('areaHelp').textContent = tt
+    ? 'The table top you are shooting on. The backdrop stands along its back edge.'
+    : 'The floor space you can dress, measured along the back wall and out toward the camera.';
+  $('bWLabel').textContent = tt ? 'Width, left to right' : 'Width along the wall';
+  $('bDLabel').textContent = tt ? 'Depth, back to front' : 'Depth toward camera';
+  $('peopleBlock').hidden = tt;
+  $('furnBlock').hidden = tt;
   $('bText').value = b.text;
   $('bSurf').value = b.surfaces;
   $('notesBlock').hidden = !state.ai;
@@ -513,6 +534,7 @@ function renderBrief() {
     state.products.length === 0 && h('p', { class: 'muted' }, 'No products registered yet. ',
       h('button', { class: 'btn small', type: 'button', onclick: () => { state.tab = 'products'; goto('items'); renderItems(); } }, 'Add a product')),
   ].filter(Boolean));
+  radio(SET_TYPES, 'setType', 'setTypes');
   radio(PEOPLE, 'person', 'people');
   radio(CAMERAS, 'camera', 'cams');
 
@@ -546,15 +568,17 @@ function renderBrief() {
 
 function bindBrief() {
   const b = state.brief;
-  const numIn = (id, key, lo, hi) => $(id).addEventListener('change', (e) => {
+  // The two size boxes edit the table or the room, depending on the kind of set.
+  const numIn = (id, room, table) => $(id).addEventListener('change', (e) => {
+    const [key, lo, hi] = isTabletop(b) ? table : room;
     const v = Number(e.target.value);
     if (v >= lo && v <= hi) b[key] = v;
     else e.target.value = b[key];
     saveBrief();
     renderBar();
   });
-  numIn('bW', 'roomW', 100, 800);
-  numIn('bD', 'roomD', 80, 600);
+  numIn('bW', ['roomW', 100, 800], ['tableW', 40, 300]);
+  numIn('bD', ['roomD', 80, 600], ['tableD', 30, 200]);
   $('bText').addEventListener('input', (e) => { b.text = e.target.value; saveBrief(); });
   $('bSurf').addEventListener('input', (e) => { b.surfaces = e.target.value; saveBrief(); });
 }
@@ -564,6 +588,7 @@ function bindBrief() {
 async function generate() {
   const things = designThings();
   if (state.busy || !things.length) return;
+  const brief = effectiveBrief();
   state.busy = true;
   state.message = state.ai ? { text: 'Claude is designing your sets. This usually takes under a minute…' } : null;
   $('regenBtn').disabled = true;
@@ -572,20 +597,20 @@ async function generate() {
   try {
     if (state.ai) {
       try {
-        const out = await api('api/generate', { items: things.map(({ cut, side, back, ...it }) => it), brief: state.brief, count: 3 });
+        const out = await api('api/generate', { items: things.map(({ cut, side, back, ...it }) => it), brief, count: 3 });
         state.designs = out.designs;
         state.source = 'ai';
       } catch (err) {
         fallbackNote = `Claude was unavailable (${err.message}). These designs come from the built-in rules instead.`;
-        state.designs = localDesigns(things, state.brief);
+        state.designs = localDesigns(things, brief);
         state.source = 'rules';
       }
     } else {
-      state.designs = localDesigns(things, state.brief);
+      state.designs = localDesigns(things, brief);
       state.source = 'rules';
     }
     state.active = 0;
-    state.designBrief = structuredClone(state.brief);
+    state.designBrief = brief;
     state.designNote = fallbackNote;
     save('designs', { designs: state.designs, source: state.source, brief: state.designBrief });
   } finally {
@@ -737,6 +762,7 @@ async function boot() {
   if (brief) {
     for (const key of Object.keys(DEFAULT_BRIEF)) if (brief[key] != null) state.brief[key] = brief[key];
     if (!CAMERAS.some((c) => c.id === state.brief.camera)) state.brief.camera = 'front';
+    if (!brief.setType) state.brief.setType = 'room'; // briefs saved before tabletop existed were room sets
     state.brief.furniture = { ...DEFAULT_BRIEF.furniture, ...state.brief.furniture };
   }
   // Older versions marked one item as the hero. That item becomes the featured product.

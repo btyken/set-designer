@@ -151,6 +151,11 @@ label.check input { width: 18px; height: 18px; accent-color: var(--ink); }
 .choice.prod { grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; row-gap: 2px; align-items: center; }
 .choice.prod img { grid-row: span 2; width: 56px; height: 56px; object-fit: contain; background: var(--deep); border-radius: var(--r-sm); }
 
+.form { counter-reset: blk; }
+.form .block { counter-increment: blk; }
+.form .block h2 > span:first-child::before { content: counter(blk, decimal-leading-zero); }
+h2 span.plain { font: inherit; color: inherit; }
+
 /* Brief */
 .form { display: grid; gap: 0; max-width: 760px; margin-top: 32px; }
 .block { padding: 24px 0; border-top: 1px solid var(--rule); display: grid; gap: 14px; }

@@ -69,7 +69,7 @@ const MOODS = {
   'BTY studio': {
     sat: 0, wallL: 60, floor: ['#dddcd9', 'paper'], furn: '#f6f5f3', key: 5200, keyPct: 66, rimPct: 22, ambient: 18,
     studio: true, accent: '#e0626b',
-    wallSay: 'White seamless paper, curved down onto the floor so there is no corner line.',
+    wallSay: 'White seamless paper, curved down onto the surface so there is no corner line.',
     floorSay: 'The same white paper carried under the whole set.',
   },
   'Clean minimal': { sat: 0.3, wallL: 86, floor: ['#bdb8af', 'concrete'], furn: '#f4f2ee', key: 5600, keyPct: 80, rimPct: 30, ambient: 55 },
@@ -108,6 +108,50 @@ const LAYOUTS = [
     floor: [[-0.16, -0.36], [0.46, 0.14]], hero: ['plinth', 'table', 'side', 'floor'], side_sign: -1,
   },
 ];
+
+// Tabletop sets: the origin is the centre of the table top and y is height above it.
+// Blocks: [x, z, height cm, width cm]. Slots are spots directly on the surface, back ones first.
+const TABLE_LAYOUTS = [
+  {
+    name: 'Stepped blocks',
+    concept: 'Three blocks step down from the back to the front, with the product on the tallest one. Simple, centred and easy to light.',
+    tip: 'Turn each block a few degrees so their front faces do not line up.',
+    blocks: [[0, -0.12, 20, 18], [0.17, 0.03, 12, 18], [-0.17, 0.09, 6, 20]],
+    floor: [[-0.32, -0.16], [0.33, -0.14], [0.02, 0.27], [-0.34, 0.24]], hero: ['plinth', 'floor'], side_sign: -1,
+  },
+  {
+    name: 'Off-centre cluster',
+    concept: 'The blocks gather right of centre and the left side stays open. The empty side is space for a headline or a price.',
+    tip: 'Keep the open side completely clear, including shadows from the key light.',
+    blocks: [[0.15, -0.1, 22, 18], [0.3, 0.05, 10, 18], [0.04, 0.12, 5, 22]],
+    floor: [[-0.2, -0.08], [0.4, -0.2], [-0.32, 0.16], [-0.06, 0.28]], hero: ['plinth', 'floor'], side_sign: 1,
+  },
+  {
+    name: 'Low and wide',
+    concept: 'Low blocks spread across the table so several pieces sit at nearly the same height. Good for a bundle or a full range.',
+    tip: 'Overlap the pieces slightly from the camera so the group reads as one shape.',
+    blocks: [[0.16, -0.1, 16, 18], [-0.18, -0.06, 10, 22], [0, 0.13, 4, 24]],
+    floor: [[0, -0.27], [0.36, 0.08], [-0.38, 0.14], [0.2, 0.28]], hero: ['plinth', 'floor'], side_sign: -1,
+  },
+];
+
+function buildTabletop(L, brief, colors) {
+  const W = brief.roomW;
+  const D = brief.roomD;
+  const furniture = [];
+  const surfaces = [];
+  const inX = (x, w) => clamp(x, -W / 2 + w / 2 + 2, W / 2 - w / 2 - 2);
+  const inZ = (z, d) => clamp(z, -D / 2 + d / 2 + 3, D / 2 - d / 2 - 2);
+  L.blocks.forEach(([x, z, h, w], i) => {
+    const f = { id: `block${i + 1}`, type: 'plinth', label: `Block ${h} cm`, x_cm: inX(x * W, w), z_cm: inZ(z * D, w), rotation_deg: [0, 10, -6][i] || 0, w_cm: w, d_cm: w, h_cm: h, color_hex: colors.plinth, note: i === 0 ? 'Tallest block. A box wrapped in paper works.' : 'A book stack or box wrapped in paper works.' };
+    furniture.push(f);
+    surfaces.push({ key: 'plinth', on: f.label, x: f.x_cm, z: f.z_cm, y: h, w: w + 4, d: w, maxH: Infinity, items: [] });
+  });
+  L.floor.forEach(([x, z], i) => {
+    surfaces.push({ key: 'floor', on: 'Table top', x: inX(x * W, 20), z: inZ(z * D, 16), y: 0, w: 26, d: 18, maxH: Infinity, items: [], slot: i });
+  });
+  return { furniture, surfaces, person: { present: false, pose: 'standing', x_cm: 0, z_cm: 0, note: '' }, table: null, tabletop: true };
+}
 
 function baseHue(items, brief) {
   if (brief.brand?.length) return hexToHsl(brief.brand[0])[0];
@@ -187,10 +231,16 @@ function dress(items, set, L, person) {
   const used = (s) => s.items.reduce((sum, it) => sum + it.w + GAP, 0);
   const fits = (s, it) => it.h <= s.maxH && used(s) + it.w <= s.w + (s.items.length ? 0 : 12);
   const onlyFloor = surfaces.every((s) => s.key === 'floor');
+  const tt = Boolean(set.tabletop);
+  const left = [];
+  if (tt) {
+    const maxW = Math.max(...surfaces.map((s) => s.w)) + 12;
+    for (const it of items) if (it.h > 70 || it.w > maxW) left.push({ item_id: it.id, reason: 'Too big for a tabletop set.' });
+    items = items.filter((it) => !left.some((l) => l.item_id === it.id));
+  }
   const hero = items.find((it) => it.hero);
   const rest = items.filter((it) => it !== hero).sort((a, b) => b.h - a.h);
   let heroSurface = null;
-  const left = [];
 
   if (hero) {
     for (const key of L.hero) {
@@ -206,13 +256,13 @@ function dress(items, set, L, person) {
   }
 
   for (const it of rest) {
-    const tall = it.h >= 50;
+    const tall = it.h >= (tt ? 25 : 50);
     const bookish = (it.shape === 'box' || it.shape === 'flat') && it.h < 16;
     const rank = tall
       ? { floor: 0, table: 4, side: 6, plinth: 7, shelf: 9 }
       : bookish
-        ? { shelf: 0, table: 2, side: 3, plinth: 5, floor: 20 }
-        : { plinth: 0, shelf: 1, table: 2, side: 2, floor: it.h >= 30 || onlyFloor ? 6 : 20 };
+        ? { shelf: 0, table: 2, side: 3, plinth: 5, floor: tt ? 1 : 20 }
+        : { plinth: 0, shelf: 1, table: 2, side: 2, floor: tt ? 3 : it.h >= 30 || onlyFloor ? 6 : 20 };
     const options = surfaces
       .filter((s) => fits(s, it) && rank[s.key] < 20 && !(s.key === 'plinth' && s.items.length))
       .map((s) => ({ s, score: rank[s.key] + s.items.length * 4 + (s === heroSurface ? 3 : 0) + (s.key === 'shelf' ? Math.abs(s.y - 100) / 60 : 0) }))
@@ -243,7 +293,7 @@ function dress(items, set, L, person) {
         z_cm: Math.round((s.z + depthShift) * 10) / 10,
         rotation_deg: it.hero ? 0 : Math.round(-x / 20),
         on: s.on,
-        note: it.hero ? 'Focal point. Label square to the camera.' : s.key === 'floor' ? 'On the floor, to anchor the edge of the frame.' : s.key === 'shelf' ? 'Background layer.' : 'Supporting piece.',
+        note: it.hero ? 'Focal point. Label square to the camera.' : s.key === 'floor' ? (tt ? 'Directly on the table top.' : 'On the floor, to anchor the edge of the frame.') : s.key === 'shelf' ? 'Background layer.' : 'Supporting piece.',
       });
     });
   }
@@ -262,7 +312,10 @@ export function localDesigns(items, brief) {
     { label: 'Split complementary', accent: hue + 150, second: hue + 210 },
   ];
 
-  return LAYOUTS.map((L, i) => {
+  const tt = brief.setType === 'tabletop';
+  const u = tt ? 0.38 : 1; // light heights and stand-off distances shrink for a tabletop set
+
+  return (tt ? TABLE_LAYOUTS : LAYOUTS).map((L, i) => {
     const sc = schemes[i];
     const s = (v) => v * mood.sat;
     const wall = hslToHex(hue + (i === 1 ? 18 : 0), s(20), mood.wallL);
@@ -271,7 +324,7 @@ export function localDesigns(items, brief) {
     const second = hslToHex(sc.second, s(70), 52);
     const furn = mood.furn || '#f3f1ec';
     const plinth = mood.furn ? furn : main;
-    const set = buildSet(L, brief, { furn, plinth });
+    const set = tt ? buildTabletop(L, brief, { furn, plinth }) : buildSet(L, brief, { furn, plinth });
     const { placements, left_out } = dress(items, set, L, set.person);
     const keyK = mood.key + (i === 1 ? -500 : i === 2 ? 400 : 0);
     const side = L.side_sign;
@@ -280,35 +333,35 @@ export function localDesigns(items, brief) {
     const lights = [
       {
         name: 'Key light', role: 'key', fixture: 'white', kelvin: keyK, color_hex: kelvinToHex(keyK), intensity_pct: mood.keyPct,
-        x_cm: side * W * 0.55, y_cm: 210, z_cm: D / 2 + 70,
+        x_cm: side * W * 0.55, y_cm: 210 * u, z_cm: D / 2 + 70 * u,
         aim: set.person.present ? 'person' : hasHero ? 'hero' : 'set', modifier: 'Large softbox',
         note: 'About 45 degrees to the side and above head height.',
       },
       {
         name: 'Fill', role: 'fill', fixture: 'white', kelvin: keyK, color_hex: kelvinToHex(keyK), intensity_pct: Math.round(mood.keyPct * 0.35),
-        x_cm: -side * W * 0.6, y_cm: 140, z_cm: D / 2 + 50,
+        x_cm: -side * W * 0.6, y_cm: 140 * u, z_cm: D / 2 + 50 * u,
         aim: 'set', modifier: 'Bounced off a white card or wall', note: 'Opposite the key. Lower it for more contrast.',
       },
       mood.studio ? {
         name: 'Edge light', role: 'rim', fixture: 'white', kelvin: keyK, color_hex: kelvinToHex(keyK), intensity_pct: mood.rimPct,
-        x_cm: -side * W * 0.5, y_cm: 190, z_cm: -D / 2 + 45,
+        x_cm: -side * W * 0.5, y_cm: 190 * u, z_cm: -D / 2 + 45 * u,
         aim: set.person.present ? 'person' : 'set', modifier: 'Small panel, out of frame',
         note: 'From behind, just enough to lift white packaging off the white backdrop.',
       } : {
         name: 'Rim colour', role: 'rim', fixture: 'rgb', kelvin: 0, color_hex: accent, intensity_pct: mood.rimPct,
-        x_cm: -side * W * 0.5, y_cm: 190, z_cm: -D / 2 + 45,
+        x_cm: -side * W * 0.5, y_cm: 190 * u, z_cm: -D / 2 + 45 * u,
         aim: set.person.present ? 'person' : 'set', modifier: 'Bare tube, out of frame',
         note: 'From behind, to outline edges and separate the subject from the wall.',
       },
       mood.studio ? {
         name: 'Backdrop glow', role: 'background', fixture: 'white', kelvin: 4800, color_hex: kelvinToHex(4800), intensity_pct: 100,
-        x_cm: [0, 0.12, -0.1][i] * W, y_cm: 40, z_cm: -D / 2 + 55,
+        x_cm: [0, 0.12, -0.1][i] * W, y_cm: 40 * u, z_cm: -D / 2 + 55 * u,
         aim: 'backdrop', modifier: 'Spot with a snoot or barn doors, hidden behind the blocks',
         note: 'Makes the soft circle of light on the paper behind the product. Leave the edges of the backdrop darker.',
       } : {
         name: 'Wall wash', role: 'background', fixture: 'rgb', kelvin: 0, color_hex: i === 0 ? main : second, intensity_pct: Math.round(mood.rimPct * 0.8),
-        x_cm: side * W * 0.25, y_cm: 25, z_cm: -D / 2 + 40,
-        aim: 'backdrop', modifier: 'Bare, on the floor behind the furniture', note: 'Washes colour up the back wall.',
+        x_cm: side * W * 0.25, y_cm: 25 * u, z_cm: -D / 2 + 40 * u,
+        aim: 'backdrop', modifier: tt ? 'Bare, on the table behind the blocks' : 'Bare, on the floor behind the furniture', note: 'Washes colour up the back wall.',
       },
     ];
     const washHex = mood.studio ? kelvinToHex(4800) : i === 0 ? main : second;
@@ -316,16 +369,18 @@ export function localDesigns(items, brief) {
     return {
       name: `${L.name} · ${sc.label.toLowerCase()}`,
       concept: L.concept,
+      set_type: tt ? 'tabletop' : 'room',
+      scale: u,
       wall_color: wall,
       floor_color: mood.floor[0],
       floor_finish: mood.floor[1],
-      wall_suggestion: mood.wallSay ? mood.wallSay : mood.wallL < 30 ? 'Dark matte wall or black paper backdrop.' : 'Plain matte wall or seamless paper backdrop.',
-      floor_suggestion: mood.floorSay ? mood.floorSay : mood.floor[1] === 'wood' ? 'Wood floor or wood-look vinyl.' : 'Plain floor, or a grey paper sweep.',
+      wall_suggestion: mood.wallSay ? mood.wallSay : tt ? 'Paper or a board standing right behind the table.' : mood.wallL < 30 ? 'Dark matte wall or black paper backdrop.' : 'Plain matte wall or seamless paper backdrop.',
+      floor_suggestion: mood.floorSay ? mood.floorSay : tt ? 'Cover the table top with paper, fabric or a board in this colour.' : mood.floor[1] === 'wood' ? 'Wood floor or wood-look vinyl.' : 'Plain floor, or a grey paper sweep.',
       ambient_pct: mood.ambient,
       palette: [
         { hex: wall, role: 'Wall' },
-        { hex: mood.floor[0], role: 'Floor' },
-        { hex: plinth, role: 'Furniture' },
+        { hex: mood.floor[0], role: tt ? 'Surface' : 'Floor' },
+        { hex: plinth, role: tt ? 'Blocks' : 'Furniture' },
         { hex: accent, role: mood.studio ? 'Packaging accent' : 'Accent light' },
         { hex: washHex, role: mood.studio ? 'Backdrop glow' : 'Wall wash' },
       ],
@@ -346,7 +401,7 @@ export function localDesigns(items, brief) {
         'Group pieces in odd numbers and vary their heights.',
         set.person.present ? 'Keep props below chest height in front of the person so nothing covers them.' : 'Leave clear space around the focal piece so it does not merge with its neighbours.',
       ],
-      camera_note: brief.camera === 'high' ? 'Camera high, tilted down about 25 degrees.' : brief.camera === 'angle' ? 'Camera off to one side for a three-quarter view.' : 'Camera straight on, lens at about chest height.',
+      camera_note: tt ? (brief.camera === 'high' ? 'Camera above the table, tilted down about 25 degrees.' : brief.camera === 'angle' ? 'Camera off to one side of the table for a three-quarter view.' : 'Camera straight on, lens level with the product label.') : brief.camera === 'high' ? 'Camera high, tilted down about 25 degrees.' : brief.camera === 'angle' ? 'Camera off to one side for a three-quarter view.' : 'Camera straight on, lens at about chest height.',
     };
   });
 }
