@@ -239,7 +239,8 @@ function dress(items, set, L, person) {
     items = items.filter((it) => !left.some((l) => l.item_id === it.id));
   }
   const hero = items.find((it) => it.hero);
-  const rest = items.filter((it) => it !== hero).sort((a, b) => b.h - a.h);
+  const prods = items.filter((it) => it.product && it !== hero); // other featured products
+  const rest = items.filter((it) => it !== hero && !prods.includes(it)).sort((a, b) => b.h - a.h);
   let heroSurface = null;
 
   if (hero) {
@@ -253,6 +254,23 @@ function dress(items, set, L, person) {
       }
     }
     if (!heroSurface) left.push({ item_id: hero.id, reason: 'No surface is wide enough for it.' });
+  }
+
+  // The other featured products go next: on the hero's table or the free blocks, close to the hero.
+  // Never on a shelf, where a label would be lost in the background.
+  const reach = tt ? 60 : 200;
+  for (const it of prods) {
+    const base = tt ? { plinth: 0, floor: 1.2 } : { table: 0, plinth: 1, side: 2, floor: 6 };
+    const options = surfaces
+      .filter((s) => fits(s, it) && s.key in base && !(s.key === 'plinth' && s.items.length))
+      .map((s) => ({
+        s,
+        score: base[s.key] + s.items.length * (s.key === 'table' ? 0.4 : 3)
+          + (heroSurface ? Math.hypot(s.x - heroSurface.x, s.z - heroSurface.z) / reach : 0),
+      }))
+      .sort((a, b) => a.score - b.score);
+    if (options.length) options[0].s.items.push(it);
+    else left.push({ item_id: it.id, reason: 'No free surface is wide enough for it.' });
   }
 
   for (const it of rest) {
@@ -285,19 +303,20 @@ function dress(items, set, L, person) {
     list.forEach((it, i) => {
       const x = list.length === 1 ? s.x : cursor + it.w / 2;
       cursor += it.w + gap;
-      const depthShift = s.key === 'table' ? (it.hero ? s.d * 0.18 : (i % 2 ? -1 : 1) * s.d * 0.08) : 0;
+      const depthShift = s.key === 'table' ? (it.hero ? s.d * 0.18 : it.product ? s.d * 0.1 : (i % 2 ? -1 : 1) * s.d * 0.08) : 0;
       placements.push({
         item_id: it.id,
         x_cm: Math.round(x * 10) / 10,
         y_cm: s.y,
         z_cm: Math.round((s.z + depthShift) * 10) / 10,
-        rotation_deg: it.hero ? 0 : Math.round(-x / 20),
+        rotation_deg: it.hero || it.product ? 0 : Math.round(-x / 20),
         on: s.on,
-        note: it.hero ? 'Focal point. Label square to the camera.' : s.key === 'floor' ? (tt ? 'Directly on the table top.' : 'On the floor, to anchor the edge of the frame.') : s.key === 'shelf' ? 'Background layer.' : 'Supporting piece.',
+        note: it.hero ? 'Focal point. Label square to the camera.' : it.product ? 'Featured product. Label square to the camera.' : s.key === 'floor' ? (tt ? 'Directly on the table top.' : 'On the floor, to anchor the edge of the frame.') : s.key === 'shelf' ? 'Background layer.' : 'Supporting piece.',
       });
     });
   }
-  placements.sort((a, b) => (items.find((i) => i.id === b.item_id)?.hero ? 1 : 0) - (items.find((i) => i.id === a.item_id)?.hero ? 1 : 0));
+  const weight = (p) => { const it = items.find((i) => i.id === p.item_id); return it?.hero ? 2 : it?.product ? 1 : 0; };
+  placements.sort((a, b) => weight(b) - weight(a));
   return { placements, left_out: left };
 }
 
@@ -397,6 +416,7 @@ export function localDesigns(items, brief) {
       ],
       styling_tips: [
         ...(mood.studio ? ['Keep every prop white or clear so the coral on the packaging is the only colour in frame.'] : []),
+        ...(items.filter((it) => it.product).length > 1 ? ['Set the products at different heights and keep every label facing the camera.'] : []),
         L.tip,
         'Group pieces in odd numbers and vary their heights.',
         set.person.present ? 'Keep props below chest height in front of the person so nothing covers them.' : 'Leave clear space around the focal piece so it does not merge with its neighbours.',

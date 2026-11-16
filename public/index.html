@@ -65,6 +65,11 @@
         </ol>
       </details>
 
+      <div id="propTools" class="tools" hidden>
+        <input id="pSearch" type="search" placeholder="Search props" aria-label="Search props" enterkeyhint="search">
+        <select id="pCat" aria-label="Category"><option value="">All categories</option></select>
+        <select id="pStatus" aria-label="Status"><option value="">Any status</option></select>
+      </div>
       <div id="itemGrid" class="grid"></div>
       <div id="itemEmpty" class="empty"></div>
     </section>
@@ -76,9 +81,9 @@
 
       <div class="form">
         <div class="block">
-          <h2><span></span>Featured product</h2>
-          <p class="help">The set is built around it, and its real photo appears in every mockup.</p>
-          <div id="prodPick" class="choices" role="radiogroup" aria-label="Featured product"></div>
+          <h2><span></span>Products in the shot</h2>
+          <p class="help">Tap every product you want in the set. The first one you pick is the main product; the rest are grouped around it. Their real photos appear in every frame.</p>
+          <div id="prodPick" class="choices" role="group" aria-label="Products in the shot"></div>
         </div>
         <div class="block">
           <h2><span></span>Kind of set</h2>
@@ -143,7 +148,8 @@
           <button id="regenBtn" class="btn">Generate again</button>
         </div>
         <div id="designTabs" class="options" role="tablist"></div>
-        <h2 class="sub"><span>A</span>Photo mockups <small>how the shots could turn out</small></h2>
+        <h2 class="sub"><span>A</span>Sample frames <small>the same set from each camera angle</small></h2>
+        <p class="help frames-help">Each frame says where the camera stands. Distances are a starting point, roughly a phone at 2× zoom, so move in or out until your screen matches.</p>
         <div id="mockups" class="mockups"></div>
         <h2 class="sub"><span>B</span>Set plan <small id="planHint">drag to look around</small></h2>
         <div class="design">

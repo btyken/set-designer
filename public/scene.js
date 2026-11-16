@@ -207,7 +207,7 @@ export class SetScene {
       const centre = new THREE.Vector3(p.x_cm, p.y_cm + it.h / 2, p.z_cm);
       points.push({ centre, it });
       if (it.hero) heroPos = centre;
-      const label = labelSprite((it.hero ? '★ ' : '') + (it.name || 'Item'));
+      const label = labelSprite((it.hero ? '★ ' : it.product ? '☆ ' : '') + (it.name || 'Item'));
       label.position.set(p.x_cm, p.y_cm + it.h + 9 * k, p.z_cm);
       this.addLabel(label, 8 * k);
     }
@@ -425,36 +425,91 @@ export class SetScene {
     return { pos, target };
   }
 
+  /**
+   * A camera position that looks at the middle of a box from a compass angle (az, degrees to the
+   * right of straight on) and a height angle (el, degrees above level), just far enough back to fit it.
+   */
+  orbit(box, az, el, pad = 1.15) {
+    const k = this.k || 1;
+    const aspect = this.frameAspect();
+    const v = THREE.MathUtils.degToRad(FOV) / 2;
+    const hHalf = Math.atan(Math.tan(v) * aspect);
+    const a = THREE.MathUtils.degToRad(az);
+    const e = THREE.MathUtils.degToRad(el);
+    const dir = new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
+    const right = new THREE.Vector3(0, 1, 0).cross(dir).normalize();
+    const up = dir.clone().cross(right);
+    const target = box.getCenter(new THREE.Vector3());
+    const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    // A tall frame of a room set crops the sides, the same way the wide shot does.
+    const crop = aspect < 1 && k === 1 ? 0.7 : 1;
+    let dist = 40 * k;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      const c = new THREE.Vector3(sx * half.x, sy * half.y, sz * half.z);
+      const toward = c.dot(dir);
+      dist = Math.max(dist, (Math.abs(c.dot(right)) * crop) / Math.tan(hHalf) + toward, Math.abs(c.dot(up)) / Math.tan(v) + toward);
+    }
+    const pos = target.clone().addScaledVector(dir, dist * pad);
+    pos.y = Math.max(pos.y, 4 * k);
+    return { pos, target };
+  }
+
+  /** Where to stand the real camera for a frame, in plain words. */
+  describeCamera(pos, target) {
+    const tt = (this.k || 1) < 1;
+    const cm = (n) => `${Math.round(Math.abs(n))} cm`;
+    const front = pos.z - this.D / 2;
+    const tilt = Math.round(THREE.MathUtils.radToDeg(Math.asin((pos.y - target.y) / pos.distanceTo(target))));
+    const side = Math.abs(pos.x) < 4 ? 'centred' : `${cm(pos.x)} ${pos.x < 0 ? 'left' : 'right'} of centre`;
+    return [
+      `Lens ${cm(pos.y)} above the ${tt ? 'table top' : 'floor'}`,
+      front >= 0 ? `${cm(front)} in front of the ${tt ? "table's" : "set's"} front edge` : `over the ${tt ? 'table' : 'set'}, ${cm(front)} in from the front edge`,
+      side,
+      Math.abs(tilt) < 2 ? 'held level' : `tilted ${tilt > 0 ? 'down' : 'up'} ${Math.abs(tilt)}°`,
+    ].join(' · ');
+  }
+
   planShots(points, heroPos, personPos) {
-    const main = this.mainCamera();
-    const shots = [{ name: 'Wide shot', note: 'The whole set from the main camera position.', ...main }];
+    const k = this.k || 1;
+    const b = this.bounds;
+    const view = this.brief?.camera || 'front';
+    const shots = [];
+    const add = (name, note, cam) => shots.push({ name, note, ...cam, cam: this.describeCamera(cam.pos, cam.target) });
+    add('Wide shot', 'The whole set from the camera position in your brief.', this.mainCamera());
+
+    const prods = points.filter((p) => p.it.product);
+    if (prods.length > 1) {
+      const box = new THREE.Box3();
+      for (const p of prods) {
+        box.expandByPoint(p.centre.clone().add(new THREE.Vector3(-p.it.w / 2, -p.it.h / 2, 0)));
+        box.expandByPoint(p.centre.clone().add(new THREE.Vector3(p.it.w / 2, p.it.h / 2, 0)));
+      }
+      add('Product group', 'All the featured products together, labels to the camera.', this.orbit(box, 0, 7, 1.4));
+    }
     const focus = heroPos || points[0]?.centre;
     if (focus) {
       const hero = points.find((p) => p.centre === focus);
-      const dist = Math.max((hero?.it.h || 20) * 3.4, 62 * (this.k || 1));
-      shots.push({
-        name: heroPos ? 'Hero close-up' : 'Close-up',
-        note: 'Moved in on the focal piece, slightly off to one side.',
+      const dist = Math.max((hero?.it.h || 20) * 3.4, 62 * k);
+      add(heroPos ? 'Main product close-up' : 'Close-up', 'Moved in on the focal piece, slightly off to one side.', {
         pos: focus.clone().add(new THREE.Vector3(dist * 0.32, dist * 0.16, dist * 0.93)),
         target: focus.clone(),
       });
     }
     if (personPos) {
-      shots.push({
-        name: 'Presenter framing', note: 'Chest-up on the person, props in the foreground.',
+      add('Presenter framing', 'Chest-up on the person, props in the foreground.', {
         pos: personPos.clone().add(new THREE.Vector3(-45, 14, 250)), target: personPos.clone().add(new THREE.Vector3(0, 6, 0)),
       });
-    } else {
-      const others = points.filter((p) => p.centre !== focus);
-      if (others.length) {
-        const mid = others.reduce((a, p) => a.add(p.centre), new THREE.Vector3()).multiplyScalar(1 / others.length);
-        const dist = Math.max(this.W * 0.75, 170 * (this.k || 1));
-        shots.push({
-          name: 'Three-quarter view', note: 'From the side, to show depth between the layers.',
-          pos: mid.clone().add(new THREE.Vector3(-dist * 0.55, dist * 0.22, dist * 0.8)), target: mid,
-        });
-      }
     }
+
+    // The same set from each standard angle. The angle already used for the wide shot is skipped.
+    if (view !== 'front') add('Straight on', 'Flat and graphic. Labels read cleanly.', this.orbit(b, 0, 4));
+    add('Three-quarter left', 'From the left, to show depth between the layers.', this.orbit(b, -35, 12));
+    if (view !== 'angle') add('Three-quarter right', 'From the right. Compare with the left to see which side hides less.', this.orbit(b, 35, 12));
+    if (view !== 'high') add('High angle', 'Looking down about 35°. Shows the layout and the tops of the blocks.', this.orbit(b, 0, 35));
+    add('Steep overhead', 'Close to a flat-lay. Standing labels get shorter from here, so use it for layout shots.', this.orbit(b, 0, 58));
+    const low = this.orbit(b, 0, 0);
+    low.pos.y = Math.max(5 * k, low.target.y * 0.3);
+    add('Low angle', 'Lens near the surface, looking slightly up. Makes the products look tall.', low);
     this.shots = shots;
   }
 
@@ -477,7 +532,7 @@ export class SetScene {
   }
 
   /** Renders clean photo mockups (no labels or light markers) at the chosen frame shape. */
-  renderShots(width = 1400) {
+  renderShots(width = 1200) {
     const aspect = this.frameAspect();
     const w = aspect >= 1 ? width : Math.round(width * aspect);
     const h = Math.round(w / aspect);
@@ -496,7 +551,7 @@ export class SetScene {
         cam.updateMatrixWorld();
         this.face(cam);
         this.renderer.render(this.scene, cam);
-        out.push({ name: shot.name, note: shot.note, url: this.canvas.toDataURL('image/jpeg', 0.9), w, h });
+        out.push({ name: shot.name, note: shot.note, cam: shot.cam, url: this.canvas.toDataURL('image/jpeg', 0.9), w, h });
       }
     } finally {
       this.renderer.setPixelRatio(ratio);

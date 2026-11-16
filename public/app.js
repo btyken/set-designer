@@ -1,6 +1,7 @@
 import { openMeasure, cutoutFromUrl } from './measure.js';
 import { SetScene } from './scene.js';
 import { localDesigns, FURNITURE } from './rules.js';
+import { CATEGORIES, MATERIALS, STATUSES, statusOf, statusName, usable, suggestUses, findDuplicates, matchesFilter } from './props.js';
 
 const $ = (id) => document.getElementById(id);
 const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
@@ -31,7 +32,7 @@ const SET_TYPES = [
 ];
 const DEFAULT_BRIEF = {
   setType: 'tabletop', tableW: 120, tableD: 70,
-  product: null, roomW: 300, roomD: 250, camera: 'front', frame: '16:9', person: 'none',
+  products: [], roomW: 300, roomD: 250, camera: 'front', frame: '16:9', person: 'none',
   furniture: { table: true, shelf: true, plinths: true, side_table: false },
   mood: MOODS[0].name, brand: [], text: '', surfaces: '',
 };
@@ -98,6 +99,7 @@ const state = {
   items: [],
   products: [],
   tab: 'props',
+  filter: { q: '', category: '', status: '' },
   brief: structuredClone(DEFAULT_BRIEF),
   designs: [],
   source: '',
@@ -124,8 +126,16 @@ async function shareImage(url, filename, title) {
 let scene;
 const saveItems = () => save('items', state.items);
 const saveProducts = () => save('products', state.products);
-const featured = (brief = state.brief) => state.products.find((p) => p.id === brief.product) || null;
-/** Props plus the featured product, in the shape the designer and 3D scene expect. */
+const featuredIds = (brief = state.brief) => brief.products || (brief.product ? [brief.product] : []);
+/** The products picked for the shot, in the order they were picked. The first is the main one. */
+const featured = (brief = state.brief) => featuredIds(brief).map((id) => state.products.find((p) => p.id === id)).filter(Boolean);
+function toggleFeatured(id) {
+  const list = state.brief.products;
+  const i = list.indexOf(id);
+  if (i >= 0) list.splice(i, 1);
+  else list.push(id);
+  saveBrief();
+}
 const isTabletop = (brief = state.brief) => brief.setType === 'tabletop';
 /** The brief as the designer sees it: a tabletop set is a small "room" with no person in it. */
 function effectiveBrief() {
@@ -133,11 +143,14 @@ function effectiveBrief() {
   if (isTabletop(b)) Object.assign(b, { roomW: b.tableW, roomD: b.tableD, person: 'none' });
   return b;
 }
-function designThings(brief = state.brief) {
-  const p = featured(brief);
-  const things = state.items.map((it) => ({ ...it, hero: false }));
-  // The product is always shown as its real photo: the cut-out, or the full photo if chosen.
-  if (p) things.push({ ...p, hero: true, cut: p.useCut && p.cut ? p.cut : p.thumb });
+/**
+ * Props plus the featured products, in the shape the designer and 3D scene expect.
+ * A new design only gets props that are available; `all` is for showing a saved design.
+ */
+function designThings(brief = state.brief, all = false) {
+  const things = state.items.filter((it) => all || usable(it)).map((it) => ({ ...it, hero: false, product: false }));
+  // A product is always shown as its real photo: the cut-out, or the full photo if chosen.
+  featured(brief).forEach((p, i) => things.push({ ...p, product: true, hero: i === 0, cut: p.useCut && p.cut ? p.cut : p.thumb }));
   return things;
 }
 async function fileToDataUrl(file, max = 900) {
@@ -210,21 +223,23 @@ function renderBar() {
   const back = $('barBack');
   $('bar').hidden = state.step === 'designs';
   text.className = state.message?.error ? 'error' : '';
-  const n = state.items.length;
-  const hero = featured();
-  const total = n + (hero ? 1 : 0);
-  const count = `${n} prop${n === 1 ? '' : 's'}`;
+  const n = state.items.filter(usable).length;
+  const off = state.items.length - n;
+  const prods = featured();
+  const total = n + prods.length;
+  const count = `${n} prop${n === 1 ? '' : 's'}${off ? ` (${off} not available)` : ''}`;
+  const prodSay = prods.length > 1 ? `${prods[0].name} + ${prods.length - 1} more` : prods[0]?.name;
   if (state.step === 'items') {
     back.hidden = true;
     next.textContent = 'Next: describe the set';
     next.disabled = total === 0;
-    text.textContent = total === 0 ? 'Add at least one prop or product to continue.' : `${count}. ${hero ? `Product: ${hero.name}.` : 'No product featured yet.'}`;
+    text.textContent = total === 0 ? 'Add at least one prop or product to continue.' : `${count}. ${prods.length ? `Product${prods.length > 1 ? 's' : ''}: ${prodSay}.` : 'No product featured yet.'}`;
   } else if (state.step === 'brief') {
     back.hidden = false;
     next.textContent = state.busy ? 'Designing…' : 'Design the set';
     next.disabled = state.busy || total === 0;
     text.textContent = state.message?.text
-      || (total === 0 ? 'Add at least one prop or product first.' : `${hero ? `${hero.name} + ` : ''}${count}, ${isTabletop() ? `${fmt(state.brief.tableW)} × ${fmt(state.brief.tableD)} cm tabletop` : `${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm room set`}. ${state.brief.mood}.`);
+      || (total === 0 ? 'Add at least one prop or product first.' : `${prods.length ? `${prods.length} product${prods.length > 1 ? 's' : ''}, ` : ''}${count}, ${isTabletop() ? `${fmt(state.brief.tableW)} × ${fmt(state.brief.tableD)} cm tabletop` : `${fmt(state.brief.roomW)} × ${fmt(state.brief.roomD)} cm room set`}. ${state.brief.mood}.`);
   }
 }
 
@@ -232,7 +247,9 @@ function renderBar() {
 
 function renderItems() {
   const prod = state.tab === 'products';
-  const list = prod ? state.products : state.items;
+  const all = prod ? state.products : state.items;
+  const list = prod ? all : all.filter((it) => matchesFilter(it, state.filter));
+  $('propTools').hidden = prod || state.items.length === 0;
   for (const b of $('libTabs').children) {
     const mine = b.dataset.tab === state.tab;
     b.setAttribute('aria-pressed', String(mine));
@@ -246,9 +263,10 @@ function renderItems() {
   $('itemGrid').replaceChildren(...list.map((it) => itemCard(it, prod)));
   $('itemEmpty').hidden = list.length > 0;
   $('itemEmpty').replaceChildren(
-    h('strong', {}, prod ? 'No products yet' : 'No props yet'),
-    h('span', {}, prod ? 'Photograph the product front-on against a plain wall, label facing the camera.'
-      : 'Add your first photo, or load the sample items to see how it works.'),
+    h('strong', {}, all.length ? 'No props match' : prod ? 'No products yet' : 'No props yet'),
+    h('span', {}, all.length ? `Clear the search and filters to see all ${all.length}.`
+      : prod ? 'Photograph the product front-on against a plain wall, label facing the camera.'
+        : 'Add your first photo, or load the sample items to see how it works.'),
   );
   if (!howTouched) $('how').open = state.items.length + state.products.length === 0;
   $('itemCount').textContent = '';
@@ -258,7 +276,13 @@ function renderItems() {
 function itemCard(it, prod) {
   const open = openEditors.has(it.id);
   const store = prod ? saveProducts : saveItems;
-  const isFeatured = prod && state.brief.product === it.id;
+  const order = prod ? state.brief.products.indexOf(it.id) : -1;
+  const isFeatured = order >= 0;
+  const off = !prod && !usable(it);
+  const uses = prod ? [] : suggestUses(it);
+  const pick = (label, key, options, blank) => h('label', {}, label, h('select', { onchange: (e) => { it[key] = e.target.value; store(); renderItems(); } },
+    blank && h('option', { value: '', selected: !it[key] }, blank),
+    options.map((o) => h('option', { value: o.id || o, selected: (key === 'status' ? statusOf(it) : it[key]) === (o.id || o) }, o.name || o))));
   const numField = (label, key) => h('label', {}, label, h('span', { class: 'unit' }, h('input', {
     type: 'number', min: 0.5, step: 0.1, value: it[key], inputMode: 'decimal',
     onchange: (e) => {
@@ -284,24 +308,27 @@ function itemCard(it, prod) {
     }));
   const shown = prod && !(it.useCut && it.cut) ? it.thumb : it.cut || it.thumb;
 
-  return h('article', { class: 'card' + (isFeatured ? ' hero' : '') },
+  return h('article', { class: 'card' + (isFeatured ? ' hero' : '') + (off ? ' off' : ''), 'data-id': it.id },
     h('div', { class: 'thumb' },
       h('img', { src: shown, alt: '' }),
-      it.pending ? h('span', { class: 'flag busy' }, 'Analysing…') : isFeatured && h('span', { class: 'flag' }, 'Featured'),
+      it.pending ? h('span', { class: 'flag busy' }, 'Analysing…') : isFeatured ? h('span', { class: 'flag' }, order === 0 ? 'Main product' : 'Featured') : off && h('span', { class: 'flag off' }, statusName(it)),
       !it.cut && h('span', { class: 'flag note', title: 'The background could not be removed. Shoot against a plain wall for a cleaner result.' }, prod ? 'Full photo' : 'No cut-out'),
     ),
     h('div', { class: 'card-body' },
       h('div', { class: 'card-name' }, it.name),
       h('div', { class: 'card-size' }, `${prod && it.category ? it.category + ' · ' : ''}${fmt(it.w)} × ${fmt(it.h)} × ${fmt(it.d)} cm`,
         h('span', { class: 'dots' }, (it.colors || []).map((c) => h('i', { style: `background:${c}`, title: c })))),
+      !prod && h('div', { class: 'card-meta' }, [it.category, it.material, it.photos?.length && `${it.photos.length + 1} photos`].filter(Boolean).join(' · ') || 'No category yet'),
+      !prod && h('div', { class: 'card-uses' }, uses.map((u) => h('span', {}, u))),
     ),
     open && h('div', { class: 'editor' },
       h('label', {}, 'Name', h('input', {
         type: 'text', value: it.name,
         onchange: (e) => { it.name = e.target.value.trim() || it.name; it.named = true; store(); renderItems(); },
       })),
-      prod && h('label', {}, 'Category', h('select', { onchange: (e) => { it.category = e.target.value; store(); renderItems(); } },
-        PRODUCT_CATS.map((c) => h('option', { value: c, selected: it.category === c }, c)))),
+      prod && pick('Category', 'category', PRODUCT_CATS),
+      !prod && h('div', { class: 'two' }, pick('Category', 'category', CATEGORIES, 'Choose…'), pick('Material', 'material', MATERIALS, 'Choose…')),
+      !prod && pick('Status', 'status', STATUSES),
       h('div', { class: 'dims' }, numField('Width', 'w'), numField('Height', 'h'), numField('Depth', 'd')),
       h('label', {}, 'Closest shape', h('select', { onchange: (e) => { it.shape = e.target.value; store(); } },
         SHAPES.map((sh) => h('option', { value: sh, selected: it.shape === sh }, sh[0].toUpperCase() + sh.slice(1))))),
@@ -311,12 +338,17 @@ function itemCard(it, prod) {
           h('button', { type: 'button', 'aria-pressed': String(!it.useCut), onclick: () => { it.useCut = false; store(); renderItems(); } }, 'Full photo')),
         h('span', { class: 'help' }, 'If the cut-out has eaten into the label or packaging, switch to the full photo.')),
       prod && h('div', { class: 'extras' }, extraPhoto('side', 'side'), extraPhoto('back', 'back')),
+      !prod && it.photos?.length > 0 && h('div', { class: 'field' }, h('span', {}, 'Other photos of this prop'),
+        h('div', { class: 'photos' }, it.photos.map((src, i) => h('button', {
+          type: 'button', 'aria-label': `Remove photo ${i + 2}`, title: 'Tap to remove',
+          onclick: () => { it.photos.splice(i, 1); store(); renderItems(); },
+        }, h('img', { src, alt: '' }), h('b', {}, '✕'))))),
     ),
     h('div', { class: 'card-actions' },
       prod && h('button', {
-        'aria-pressed': String(isFeatured), title: 'The product the set is built around',
-        onclick: () => { state.brief.product = isFeatured ? null : it.id; saveBrief(); renderItems(); renderBrief(); },
-      }, isFeatured ? '★ Featured' : '☆ Feature'),
+        'aria-pressed': String(isFeatured), title: 'Put this product in the shot. The first one picked is the main product.',
+        onclick: () => { toggleFeatured(it.id); renderItems(); renderBrief(); },
+      }, isFeatured ? (order === 0 ? '★ Main' : '★ Featured') : '☆ Feature'),
       h('button', {
         'aria-expanded': String(open),
         onclick: () => { open ? openEditors.delete(it.id) : openEditors.add(it.id); renderItems(); },
@@ -326,7 +358,7 @@ function itemCard(it, prod) {
         onclick: () => {
           if (prod) {
             state.products = state.products.filter((o) => o !== it);
-            if (state.brief.product === it.id) { state.brief.product = state.products[0]?.id || null; saveBrief(); }
+            if (isFeatured) toggleFeatured(it.id);
             renderBrief();
           } else state.items = state.items.filter((o) => o !== it);
           store();
@@ -347,9 +379,7 @@ async function analyseItem(it) {
     if (SHAPES.includes(a.shape)) it.shape = a.shape;
     if (a.colors?.length) it.colors = a.colors;
     if (!it.depthSet && a.depth_ratio) it.d = Math.round(it.w * a.depth_ratio * 10) / 10;
-    it.material = a.material;
-    it.style = a.style;
-    it.category = a.category;
+    if (!it.material && MATERIALS.includes(a.material)) it.material = a.material;
   } catch (err) {
     console.warn('Analyse failed:', err.message);
   }
@@ -370,29 +400,67 @@ async function addPhoto(file) {
     it.category = 'Other';
     it.useCut = Boolean(it.cut);
     state.products.push(it);
-    if (!featured()) { state.brief.product = it.id; saveBrief(); renderBrief(); }
+    if (!featured().length) { state.brief.products = [it.id]; saveBrief(); }
+    renderBrief();
     saveProducts();
   } else {
+    // A second photo of a prop the team already has is added to that prop, not saved twice.
+    const dups = findDuplicates(it, state.items);
+    const same = dups.length ? await askDuplicate(it, dups) : null;
+    if (same) {
+      same.photos = [...(same.photos || []), it.thumb].slice(-4);
+      saveItems();
+      showCard(same.id);
+      return;
+    }
+    it.status = 'available';
     it.name = `Item ${state.items.length + 1}`;
     state.items.push(it);
     saveItems();
   }
   // Name, depth and shape are set on the card, so open its editor straight away.
-  openEditors.clear();
-  openEditors.add(it.id);
-  renderItems();
-  document.querySelector('#itemGrid .card:last-child')?.scrollIntoView({ block: 'center' });
+  showCard(it.id);
   if (!prod) analyseItem(it);
+}
+
+/** Opens one card's editor and brings it into view, clearing any filter that would hide it. */
+function showCard(id) {
+  state.filter = { q: '', category: '', status: '' };
+  $('pSearch').value = '';
+  $('pCat').value = '';
+  $('pStatus').value = '';
+  openEditors.clear();
+  openEditors.add(id);
+  renderItems();
+  document.querySelector(`#itemGrid .card[data-id="${id}"]`)?.scrollIntoView({ block: 'center' });
+}
+
+/** Asks whether a new photo is one of the look-alike props. Resolves to that prop, or null for "new". */
+function askDuplicate(it, dups) {
+  return new Promise((resolve) => {
+    const close = (v) => { box.remove(); resolve(v); };
+    const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Possible duplicate' },
+      h('div', { class: 'sheet-in' },
+        h('h2', {}, 'Same item as one of these?'),
+        h('p', { class: 'help' }, 'This photo looks like a prop you already have. Tap it to add the photo there instead of saving a second copy.'),
+        h('div', { class: 'dup-new' }, h('img', { src: it.cut || it.thumb, alt: '' }), h('span', {}, `Your new photo · ${fmt(it.w)} × ${fmt(it.h)} cm`)),
+        h('div', { class: 'dup-list' }, dups.map((d) => h('button', { class: 'choice prod', type: 'button', onclick: () => close(d) },
+          h('img', { src: d.cut || d.thumb, alt: '' }), h('strong', {}, d.name),
+          h('span', {}, `${d.category ? d.category + ' · ' : ''}${fmt(d.w)} × ${fmt(d.h)} cm`)))),
+        h('button', { class: 'btn primary', type: 'button', onclick: () => close(null) }, 'No, it is a new prop'),
+      ));
+    document.body.append(box);
+  });
 }
 
 function loadSamples() {
   const samples = [
     { name: 'Amber serum bottle', w: 5, h: 14, d: 5, shape: 'cylinder', color: '#b8651b', hero: true, draw: 'bottle' },
-    { name: 'Teal ceramic vase', w: 14, h: 30, d: 14, shape: 'cylinder', color: '#2f7f86', draw: 'vase' },
-    { name: 'Stack of books', w: 24, h: 10, d: 16, shape: 'box', color: '#b5553c', draw: 'books' },
-    { name: 'Cream pillar candle', w: 8, h: 14, d: 8, shape: 'cylinder', color: '#efe3cc', draw: 'candle' },
-    { name: 'White stone bowl', w: 22, h: 9, d: 22, shape: 'sphere', color: '#e7e2da', draw: 'bowl' },
-    { name: 'Tall pampas vase', w: 26, h: 78, d: 26, shape: 'cone', color: '#c9b38a', draw: 'pampas' },
+    { name: 'Teal ceramic vase', w: 14, h: 30, d: 14, shape: 'cylinder', color: '#2f7f86', draw: 'vase', cat: 'Vase or vessel', mat: 'Ceramic' },
+    { name: 'Stack of books', w: 24, h: 10, d: 16, shape: 'box', color: '#b5553c', draw: 'books', cat: 'Book or paper', mat: 'Paper' },
+    { name: 'Cream pillar candle', w: 8, h: 14, d: 8, shape: 'cylinder', color: '#efe3cc', draw: 'candle', cat: 'Candle or lamp', mat: 'Other' },
+    { name: 'White stone bowl', w: 22, h: 9, d: 22, shape: 'sphere', color: '#e7e2da', draw: 'bowl', cat: 'Tray or dish', mat: 'Stone' },
+    { name: 'Tall pampas vase', w: 26, h: 78, d: 26, shape: 'cone', color: '#c9b38a', draw: 'pampas', cat: 'Plant or flower', mat: 'Plant' },
   ];
   for (const s of samples) {
     const k = 480 / Math.max(s.w, s.h);
@@ -476,11 +544,11 @@ function loadSamples() {
       // The sample bottle stands in for a product until a real one is registered.
       if (state.products.length) continue;
       state.products.push({ ...rec, name: 'Sample serum bottle', category: 'Serum', useCut: true });
-      state.brief.product = rec.id;
+      state.brief.products = [rec.id];
       saveProducts();
       saveBrief();
       renderBrief();
-    } else state.items.push(rec);
+    } else state.items.push({ ...rec, status: 'available', category: s.cat, material: s.mat });
   }
   saveItems();
   renderItems();
@@ -523,14 +591,15 @@ function renderBrief() {
     onclick: () => { b[key] = c.id; saveBrief(); renderBrief(); },
   }, svg(c.icon), h('strong', {}, c.name), h('span', {}, c.say))));
   $('prodPick').replaceChildren(...[
-    ...state.products.map((p) => h('button', {
-      class: 'choice prod', type: 'button', role: 'radio', 'aria-checked': String(b.product === p.id),
-      onclick: () => { b.product = p.id; saveBrief(); renderBrief(); renderItems(); },
-    }, h('img', { src: p.useCut && p.cut ? p.cut : p.thumb, alt: '' }), h('strong', {}, p.name), h('span', {}, `${p.category || 'Product'} · ${fmt(p.h)} cm tall`))),
-    state.products.length > 0 && h('button', {
-      class: 'choice', type: 'button', role: 'radio', 'aria-checked': String(!featured()),
-      onclick: () => { b.product = null; saveBrief(); renderBrief(); renderItems(); },
-    }, h('strong', {}, 'No product'), h('span', {}, 'Design a set with props only')),
+    ...state.products.map((p) => {
+      const order = b.products.indexOf(p.id);
+      return h('button', {
+        class: 'choice prod', type: 'button', role: 'checkbox', 'aria-checked': String(order >= 0),
+        onclick: () => { toggleFeatured(p.id); renderBrief(); renderItems(); },
+      }, h('img', { src: p.useCut && p.cut ? p.cut : p.thumb, alt: '' }), h('strong', {}, p.name),
+      h('span', {}, `${order === 0 ? 'Main product · ' : order > 0 ? `Product ${order + 1} · ` : ''}${p.category || 'Product'} · ${fmt(p.h)} cm tall`));
+    }),
+    state.products.length > 0 && featured().length === 0 && h('p', { class: 'muted' }, 'None picked, so the set will use props only.'),
     state.products.length === 0 && h('p', { class: 'muted' }, 'No products registered yet. ',
       h('button', { class: 'btn small', type: 'button', onclick: () => { state.tab = 'products'; goto('items'); renderItems(); } }, 'Add a product')),
   ].filter(Boolean));
@@ -665,20 +734,20 @@ async function renderDesigns() {
 
   scene ??= new SetScene($('scene'));
   const index = state.active;
-  $('mockups').replaceChildren(h('p', { class: 'muted' }, 'Rendering mockups…'));
-  const ready = await scene.setDesign(d, designThings(brief), brief);
+  $('mockups').replaceChildren(h('p', { class: 'muted' }, 'Rendering sample frames…'));
+  const ready = await scene.setDesign(d, designThings(brief, true), brief);
   if (!ready || index !== state.active) return;
   const shots = scene.renderShots();
   const slug = `set-option-${index + 1}`;
   $('mockups').replaceChildren(...shots.map((shot) => h('figure', {},
     h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => openLightbox(shot, slug) },
       h('img', { src: shot.url, alt: `${shot.name} mockup`, width: shot.w, height: shot.h })),
-    h('figcaption', {}, h('strong', {}, shot.name), h('span', {}, shot.note)),
+    h('figcaption', {}, h('strong', {}, shot.name), h('span', {}, shot.note), shot.cam && h('span', { class: 'cam' }, shot.cam)),
   )));
 }
 
 function renderDetails(d, brief) {
-  const names = new Map(designThings(brief).map((it) => [it.id, (it.hero ? '★ ' : '') + it.name]));
+  const names = new Map(designThings(brief, true).map((it) => [it.id, (it.hero ? '★ ' : it.product ? '☆ ' : '') + it.name]));
   const li = (badge, title, spec, say) => h('li', {}, badge, h('strong', {}, title), h('div', { class: 'spec' }, spec), h('div', { class: 'say' }, say || ''));
   $('details').replaceChildren(...[
     state.designNote && h('p', { class: 'note', style: 'color:var(--danger);margin:0 0 12px' }, state.designNote),
@@ -742,6 +811,11 @@ async function boot() {
   $('sampleBtn').addEventListener('click', loadSamples);
   for (const b of $('libTabs').children) b.addEventListener('click', () => { state.tab = b.dataset.tab; openEditors.clear(); renderItems(); });
   $('regenBtn').addEventListener('click', generate);
+  $('pCat').append(...CATEGORIES.map((c) => h('option', { value: c }, c)));
+  $('pStatus').append(...STATUSES.map((s) => h('option', { value: s.id }, s.name)));
+  $('pSearch').addEventListener('input', (e) => { state.filter.q = e.target.value; renderItems(); });
+  $('pCat').addEventListener('change', (e) => { state.filter.category = e.target.value; renderItems(); });
+  $('pStatus').addEventListener('change', (e) => { state.filter.status = e.target.value; renderItems(); });
   $('tLabels').addEventListener('change', (e) => { if (scene) { scene.showLabels = e.target.checked; scene.applyVisibility(); } });
   $('tLights').addEventListener('change', (e) => { if (scene) { scene.showLights = e.target.checked; scene.applyVisibility(); } });
   $('snapBtn').addEventListener('click', async () => {
@@ -763,6 +837,8 @@ async function boot() {
     for (const key of Object.keys(DEFAULT_BRIEF)) if (brief[key] != null) state.brief[key] = brief[key];
     if (!CAMERAS.some((c) => c.id === state.brief.camera)) state.brief.camera = 'front';
     if (!brief.setType) state.brief.setType = 'room'; // briefs saved before tabletop existed were room sets
+    // Briefs saved when only one product could be featured.
+    if (!Array.isArray(brief.products)) state.brief.products = brief.product ? [brief.product] : [];
     state.brief.furniture = { ...DEFAULT_BRIEF.furniture, ...state.brief.furniture };
   }
   // Older versions marked one item as the hero. That item becomes the featured product.
@@ -772,14 +848,14 @@ async function boot() {
       state.items = state.items.filter((it) => it !== oldHero);
       const { hero, ...rest } = oldHero;
       state.products.push({ ...rest, category: 'Other', useCut: Boolean(rest.cut) });
-      state.brief.product = rest.id;
+      state.brief.products = [rest.id];
       saveProducts();
       saveBrief();
     }
     for (const it of state.items) delete it.hero;
     saveItems();
   }
-  if (!featured()) state.brief.product = null;
+  state.brief.products = state.brief.products.filter((id) => state.products.some((p) => p.id === id));
   if (designs?.designs?.[0]?.furniture && designs.brief?.roomW) {
     state.designs = designs.designs;
     state.source = designs.source;
