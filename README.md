@@ -34,7 +34,8 @@ Props, products and designs are saved in each browser.
       set-designer/        app.js (screens), measure.js, props.js, rules.js (designs), scene.js (3D)
       shoot-dashboard/     dashboard.js (screens), tracker.js (targets maths + tracker calls)
       css/                 base.css, set-designer.css, shoot-dashboard.css
-    apps-script/Code.gs    runs inside the tracker sheet
+    apps-script/Code.gs    runs inside the tracker sheet (app bridge)
+    apps-script/Catalog.gs same project: approved RAW folders → affiliate RAW CATALOG
     server.js              local server (and the optional Claude design path)
 
 ## Run locally
@@ -71,6 +72,22 @@ The app talks to the tracker through a small script attached to the sheet. It ru
 After a code change to `Code.gs`, use **Deploy → Manage deployments → Edit → New version** so the URL stays the same.
 
 What the script touches: in SHOOT PLAN only Captured Clips, QC Passed Clips, Shoot Status, Video Stream, and Moodboard / Reference Link (only when empty). It never writes the (Auto) columns, RAW Folder Link or RAW REVIEW. Pegs go in a `BTY B-Roll Moodboards` folder next to the sheet, one subfolder per shoot, shared as view-only by link. The team passcode is the only key, so change it from the sheet menu if it leaks.
+
+## Send approved RAW to the affiliate RAW CATALOG
+
+`apps-script/Catalog.gs` links RAW REVIEW in this tracker to RAW CATALOG in the **External Affiliate RAW Content Distribution System** sheet.
+
+- It picks clips with QC Result **Pass** and Brand Approval **Approved**, groups them by RAW folder (RAW Folder Link (Auto), else the shoot's RAW Folder Link in SHOOT PLAN), and adds one RAW CATALOG row per folder that is not there yet (matched by Drive folder ID, so hand-typed rows count).
+- Each new row gets the next RAW-### ID, category `BTY B-ROLLS (VIDEO)`, folder label from Content Type, shoot date, folder link, description with the clip count, BTY Product Tag, and a note with the Shoot IDs. Share Status is **Needs Review**: a coordinator still marks it Ready.
+- It only adds rows after the last filled one. It never edits or deletes catalog rows and never writes columns N–R. If the catalog's A–M headers move, it stops without writing.
+
+Set up (once, in the same Apps Script project as Code.gs):
+
+1. **+ → Script**, name it `Catalog`, paste in everything from `apps-script/Catalog.gs`. Also paste the updated `Code.gs` (it adds the menu items). Save.
+2. Reload the tracker. **B-roll Tools → Preview RAW CATALOG additions** and allow the new permission (it opens the distribution sheet). Nothing is written by Preview.
+3. **B-roll Tools → Turn on hourly RAW CATALOG link**. **Send approved RAW to RAW CATALOG now** runs it at once.
+
+To point it at another sheet, set the script property `CATALOG_SHEET_ID`.
 
 ## Publish the static site
 

@@ -13,7 +13,23 @@ export const planRow = (date, product, audience, planned, member, extra = {}) =>
   return r;
 };
 
-export function world({ rows } = {}) {
+const REVIEW_HEAD = ['RAW Clip ID (Auto)', 'Video File Link', 'BTY Product(s) (Auto)', 'Content Format (Auto)', 'Keywords / Tags', 'QC Result', 'Brand Approval', 'Ready? (Auto)', 'RAW Folder Link (Auto)', 'Notes', 'Shoot ID (Select)', 'Shoot Date', 'Link Check', 'Member', 'Shoot Task', 'Video Stream (Auto) — helper'];
+export const reviewRow = (shootId, file, qc, approval, extra = {}) => {
+  const r = Array(REVIEW_HEAD.length).fill('');
+  r[1] = file; r[5] = qc; r[6] = approval; r[10] = shootId;
+  for (const [k, v] of Object.entries(extra)) r[REVIEW_HEAD.indexOf(k)] = v;
+  return r;
+};
+export const CATALOG_HEAD = ['RAW Asset ID', 'Category', 'Folder Label', 'RAW Content Date', 'Drive Folder Link', 'Description', 'Sample Video', 'Share Status', 'Recommended Use', 'Source Row', 'Verified Date', 'Notes', 'BTY Product Tag (Manual)', 'Product Tag Check', 'Delivered Events (Auto)', 'Unique Affiliates (Auto)', 'Posted Links (Auto)', 'Asset Check (Auto)'];
+export const catalogRow = (id, link, extra = {}) => {
+  const r = Array(CATALOG_HEAD.length).fill('');
+  r[0] = id; r[1] = 'BTY B-ROLLS (VIDEO)'; r[2] = 'PRODUCT SHOWCASE'; r[4] = link; r[7] = 'Ready';
+  for (const [k, v] of Object.entries(extra)) r[CATALOG_HEAD.indexOf(k)] = v;
+  return r;
+};
+const blankRows = (n, w) => Array.from({ length: n }, () => Array(w).fill(''));
+
+export function world({ rows, review = [], catalog, catalogBlank = 5 } = {}) {
   let nextId = 1;
   const ids = () => `id${nextId++}`;
   const props = new Map();
@@ -63,27 +79,46 @@ export function world({ rows } = {}) {
   overview[5].splice(3, 2, 'Internal - CBQ', '90');
   overview[6].splice(3, 2, 'External', '60');
 
+  const show = (v) => (Object.prototype.toString.call(v) === '[object Date]' ? v.toDateString() : String(v));
   const sheet = (data, id) => ({
     data,
     getSheetId: () => id,
     getLastRow: () => data.length,
+    getMaxRows: () => data.length,
     getLastColumn: () => data[0].length,
+    insertRowsAfter: (after, n) => { data.splice(after, 0, ...blankRows(n, data[0].length)); },
     getRange: (r, c, nr = 1, nc = 1) => ({
       getValues: () => data.slice(r - 1, r - 1 + nr).map((row) => row.slice(c - 1, c - 1 + nc)),
-      getDisplayValues: () => data.slice(r - 1, r - 1 + nr).map((row) => row.slice(c - 1, c - 1 + nc).map(String)),
+      getDisplayValues: () => data.slice(r - 1, r - 1 + nr).map((row) => row.slice(c - 1, c - 1 + nc).map(show)),
       setValue: (v) => { data[r - 1][c - 1] = v; },
+      setValues: (vals) => {
+        if (vals.length !== nr || vals.some((row) => row.length !== nc)) throw new Error('setValues size mismatch');
+        if (r - 1 + nr > data.length) throw new Error('Range is outside the sheet');
+        vals.forEach((row, i) => row.forEach((v, j) => { data[r - 1 + i][c - 1 + j] = v; }));
+      },
     }),
   });
-  const sheets = { 'SHOOT PLAN': sheet(plan, 9005), OVERVIEW: sheet(overview, 9001) };
+  const reviewData = [REVIEW_HEAD, ...review];
+  const catalogData = [CATALOG_HEAD, ...(catalog || [catalogRow('RAW-047', 'https://drive.google.com/drive/folders/1DlY5TGkPo71HE1GZfb-NHHED8VLL5rYa?usp=sharing')]), ...blankRows(catalogBlank, CATALOG_HEAD.length)];
+  const sheets = { 'SHOOT PLAN': sheet(plan, 9005), OVERVIEW: sheet(overview, 9001), 'RAW REVIEW': sheet(reviewData, 9006) };
+  const catalogSheet = sheet(catalogData, 312972366);
+  const catalogSs = { getSheetByName: (n) => (n === 'RAW CATALOG' ? catalogSheet : null) };
+  const opened = [];
+  const triggers = [];
   const ss = {
     getName: () => 'BTY B-Roll Tracker', getUrl: () => 'https://docs.google.com/spreadsheets/d/X/edit', getId: () => sheetFile.id,
     getSpreadsheetTimeZone: () => 'Asia/Manila', getSheetByName: (n) => sheets[n] || null,
   };
 
   const ctx = {
-    SpreadsheetApp: { getActive: () => ss, flush() {} },
+    SpreadsheetApp: { getActive: () => ss, flush() {}, openById: (id) => { opened.push(id); return catalogSs; } },
+    ScriptApp: {
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: (t) => triggers.splice(triggers.indexOf(t), 1),
+      newTrigger: (fn) => ({ timeBased: () => ({ everyHours: (h) => ({ create: () => { const t = { fn, h, getHandlerFunction: () => fn }; triggers.push(t); return t; } }) }) }),
+    },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
-    LockService: { getDocumentLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: { getDocumentLock: () => ({ waitLock() {}, releaseLock() {} }), getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ body: s, setMimeType() { return this; } }) },
     DriveApp: {
       Access: { ANYONE_WITH_LINK: 'anyone' }, Permission: { VIEW: 'view' },
@@ -102,8 +137,9 @@ export function world({ rows } = {}) {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(new URL('../../apps-script/Code.gs', import.meta.url), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(new URL('../../apps-script/Catalog.gs', import.meta.url), 'utf8'), ctx);
   const token = createHash('sha256').update('sd-api:team-pass').digest('hex');
   const post = (body) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).body);
-  return { ctx, props, plan, items, post, token, setToken: () => props.set('API_TOKEN', token) };
+  return { ctx, props, plan, items, post, token, setToken: () => props.set('API_TOKEN', token), review: reviewData, catalog: catalogData, opened, triggers };
 }
 

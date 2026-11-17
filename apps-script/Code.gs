@@ -14,6 +14,7 @@
  *  - lists earlier shoots that are still short of their planned clips
  *
  * It never writes the (Auto) columns, the RAW folder link or RAW REVIEW.
+ * Catalog.gs (same project) adds approved RAW REVIEW folders to the affiliate RAW CATALOG.
  */
 
 const SD = {
@@ -58,6 +59,11 @@ function onOpen() {
     .createMenu('B-roll Tools')
     .addItem('Set team passcode…', 'sdSetPasscode')
     .addItem('Open moodboards folder', 'sdShowRoot')
+    .addSeparator()
+    .addItem('Preview RAW CATALOG additions', 'catPreview')
+    .addItem('Send approved RAW to RAW CATALOG now', 'catRunNow')
+    .addItem('Turn on hourly RAW CATALOG link', 'catTurnOnHourly')
+    .addItem('Turn off hourly RAW CATALOG link', 'catTurnOffHourly')
     .addToUi();
 }
 
