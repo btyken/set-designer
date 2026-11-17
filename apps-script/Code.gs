@@ -7,8 +7,11 @@
  * What it does for the app's Shoot Dashboard:
  *  - reads one week of SHOOT PLAN rows and the weekly targets on OVERVIEW
  *  - writes Captured Clips, QC Passed Clips and Shoot Status for one row
+ *  - sets Video Stream for one row
  *  - keeps one Drive folder of inspiration photos ("pegs") per shoot and puts
- *    that folder's link in Moodboard / Reference Link when the cell is empty
+ *    that folder's link in Moodboard / Reference Link when the cell is empty,
+ *    plus a General inspo folder that is not tied to a shoot
+ *  - lists earlier shoots that are still short of their planned clips
  *
  * It never writes the (Auto) columns, the RAW folder link or RAW REVIEW.
  */
@@ -40,6 +43,12 @@ const SD = {
   STATUSES: ['Planned', 'Ready to Shoot', 'Shooting', 'QC', 'Completed', 'Paused'],
   STREAMS: ['Internal - Massive', 'Internal - CBQ', 'External'],
   MAX_UPLOAD_BYTES: 8 * 1024 * 1024,
+  // Earlier shoots still short of their planned clips are carried into the current week,
+  // looking back this many days. Completed or Paused rows are not carried.
+  OPEN_DAYS: 120,
+  CLOSED: ['Completed', 'Paused'],
+  // A moodboard that is not tied to one shoot.
+  GENERAL: 'GENERAL',
 };
 
 // ---------- Sheet menu (for the owner) ----------
@@ -87,7 +96,7 @@ function doPost(e) {
   if (!want) return sdJson_({ ok: false, error: 'The tracker has no team passcode yet. Set it from the B-roll Tools menu in the sheet.' });
   if (body.token !== want) return sdJson_({ ok: false, auth: true, error: 'Wrong team passcode.' });
 
-  const routes = { ping: sdPing_, week: sdWeek_, report: sdReport_, upload: sdUpload_, remove: sdRemove_, image: sdImage_ };
+  const routes = { ping: sdPing_, week: sdWeek_, report: sdReport_, stream: sdStream_, upload: sdUpload_, remove: sdRemove_, image: sdImage_ };
   const fn = routes[body.action];
   if (!fn) return sdJson_({ ok: false, error: 'Unknown action.' });
   try {
@@ -112,17 +121,21 @@ function sdWeek_(body) {
   const startKey = sdDay_(start, tz);
   const endKey = sdDay_(new Date(start.getTime() + 6 * 864e5), tz);
 
+  const openFrom = sdDay_(new Date(start.getTime() - SD.OPEN_DAYS * 864e5), tz);
   const plan = sdPlan_();
   const rows = [];
+  const openRows = [];
   plan.values.forEach((vals, i) => {
     const r = sdRowObject_(plan.cols, vals, tz);
-    if (!r.date || r.date < startKey || r.date > endKey) return;
+    if (!r.date) return;
     r.row = i + 2;
-    rows.push(r);
+    if (r.date >= startKey && r.date <= endKey) rows.push(r);
+    else if (r.date < startKey && r.date >= openFrom && sdIsOpen_(r)) openRows.push(r);
   });
 
   const boards = {};
-  rows.forEach((r) => {
+  boards[SD.GENERAL] = { key: SD.GENERAL, folderUrl: '', pins: [] };
+  rows.concat(openRows).forEach((r) => {
     const key = sdBoardKey_(r);
     r.board = key;
     if (!boards[key]) boards[key] = { key: key, folderUrl: '', pins: [] };
@@ -140,8 +153,16 @@ function sdWeek_(body) {
     sheetUrl: ss.getUrl() + '#gid=' + plan.sheet.getSheetId(),
     targets: sdTargets_(),
     rows: rows,
+    openRows: openRows,
     boards: boards,
   };
+}
+
+/** Still owes clips: something planned, fewer captured, and not closed. */
+function sdIsOpen_(r) {
+  const planned = Number(r.planned) || 0;
+  const captured = Number(r.captured) || 0;
+  return planned > 0 && captured < planned && SD.CLOSED.indexOf(r.status) < 0;
 }
 
 /** Writes the shot counts (and optionally the status) for one SHOOT PLAN row. */
@@ -151,13 +172,7 @@ function sdReport_(body) {
   try {
     const plan = sdPlan_();
     const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
-    const rowNum = Number(body.row);
-    if (!(rowNum >= 2 && rowNum <= plan.values.length + 1)) throw new Error('That shoot row no longer exists. Refresh and try again.');
-    const current = sdRowObject_(plan.cols, plan.values[rowNum - 2], tz);
-    const ex = body.expect || {};
-    if (current.date !== ex.date || current.product !== ex.product || current.member !== ex.member) {
-      throw new Error('The tracker changed since you opened it. Refresh and try again.');
-    }
+    const rowNum = sdCheckRow_(plan, tz, body);
     const captured = sdCount_(body.captured, 'Captured clips');
     const qc = body.qcPassed === null || body.qcPassed === '' || body.qcPassed === undefined ? null : sdCount_(body.qcPassed, 'QC-passed clips');
     if (qc !== null && qc > captured) throw new Error('QC-passed clips cannot be more than captured clips.');
@@ -178,6 +193,39 @@ function sdReport_(body) {
   }
 }
 
+/** Sets Video Stream (Internal - Massive, Internal - CBQ or External) for one SHOOT PLAN row. */
+function sdStream_(body) {
+  if (SD.STREAMS.indexOf(body.stream) < 0) throw new Error('Pick Internal - Massive, Internal - CBQ or External.');
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(20000);
+  try {
+    const plan = sdPlan_();
+    if (!plan.cols.stream) throw new Error('SHOOT PLAN has no Video Stream column.');
+    const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
+    const rowNum = sdCheckRow_(plan, tz, body);
+    plan.sheet.getRange(rowNum, plan.cols.stream).setValue(body.stream);
+    SpreadsheetApp.flush();
+    const r = sdRowObject_(plan.cols, plan.sheet.getRange(rowNum, 1, 1, plan.sheet.getLastColumn()).getValues()[0], tz);
+    r.row = rowNum;
+    r.board = sdBoardKey_(r);
+    return { row: r };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** The row number in the request, after checking it still holds the same shoot and person. */
+function sdCheckRow_(plan, tz, body) {
+  const rowNum = Number(body.row);
+  if (!(rowNum >= 2 && rowNum <= plan.values.length + 1)) throw new Error('That shoot row no longer exists. Refresh and try again.');
+  const current = sdRowObject_(plan.cols, plan.values[rowNum - 2], tz);
+  const ex = body.expect || {};
+  if (current.date !== ex.date || current.product !== ex.product || current.member !== ex.member) {
+    throw new Error('The tracker changed since you opened it. Refresh and try again.');
+  }
+  return rowNum;
+}
+
 /** Saves one inspiration photo into the shoot's folder and links the folder in the sheet. */
 function sdUpload_(body) {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(body.image || '');
@@ -185,7 +233,7 @@ function sdUpload_(body) {
   const bytes = Utilities.base64Decode(m[2]);
   if (bytes.length > SD.MAX_UPLOAD_BYTES) throw new Error('That photo is too large.');
   const key = String(body.board || '');
-  if (!/^\d{4}-\d{2}-\d{2}\|/.test(key)) throw new Error('Unknown shoot.');
+  if (key !== SD.GENERAL && !/^\d{4}-\d{2}-\d{2}\|/.test(key)) throw new Error('Unknown shoot.');
 
   const lock = LockService.getDocumentLock();
   lock.waitLock(20000);
@@ -203,7 +251,7 @@ function sdUpload_(body) {
   file.setDescription(JSON.stringify({ note: note, by: by }));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) { /* domain policy: the app falls back to sdImage_ */ }
 
-  sdLinkBoardInSheet_(key, folder.getUrl());
+  if (key !== SD.GENERAL) sdLinkBoardInSheet_(key, folder.getUrl());
   return { pin: sdPin_(file), folderUrl: folder.getUrl() };
 }
 
@@ -329,7 +377,7 @@ function sdFindBoard_(key) {
 
 function sdCreateBoard_(key, title) {
   const parts = key.split('|');
-  const name = String(title || '').trim() || [parts[0], parts[1], parts[2]].filter(Boolean).join(' · ');
+  const name = key === SD.GENERAL ? 'General inspo' : String(title || '').trim() || [parts[0], parts[1], parts[2]].filter(Boolean).join(' · ');
   const folder = sdRoot_().createFolder(name.slice(0, 120));
   folder.setDescription(key);
   try { folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) { /* domain policy */ }

@@ -31,7 +31,8 @@ test('week returns only that week, grouped boards and the targets', () => {
   assert.equal(out.rows[0].captured, null);
   assert.equal(out.rows[0].board, out.rows[1].board);
   assert.notEqual(out.rows[0].board, out.rows[2].board);
-  assert.equal(Object.keys(out.boards).length, 2);
+  assert.equal(Object.keys(out.boards).length, 4); // two shoots this week, one open shoot, General
+  assert.ok(out.boards.GENERAL);
   assert.deepEqual(out.targets, { 'Internal - Massive': 90, 'Internal - CBQ': 90, External: 60 });
   assert.match(out.sheetUrl, /#gid=9005$/);
 });
@@ -107,4 +108,47 @@ test('upload refuses non-images and unknown shoots', () => {
   w.setToken();
   assert.match(w.post({ action: 'upload', token: w.token, board: '2026-11-18|X|Y', image: 'data:text/plain;base64,aGk=' }).error, /JPEG/);
   assert.match(w.post({ action: 'upload', token: w.token, board: 'nonsense', image: 'data:image/png;base64,aGk=' }).error, /Unknown shoot/);
+});
+
+test('earlier shoots still short of plan are carried over; closed or done ones are not', () => {
+  const w = world();
+  w.setToken();
+  const out = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  assert.deepEqual(out.openRows.map((r) => [r.member, r.date]), [['Abe', '2026-10-17']]);
+  assert.ok(out.boards[out.openRows[0].board]);
+  // Mark it Completed: no longer carried.
+  w.plan[4][11] = 'Completed';
+  assert.equal(w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' }).openRows.length, 0);
+  // Captured all planned clips: not carried either.
+  w.plan[4][11] = '';
+  w.plan[4][7] = 75;
+  assert.equal(w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' }).openRows.length, 0);
+  // Too long ago: not carried.
+  const old = w.post({ action: 'week', token: w.token, weekStart: '2027-06-07' });
+  assert.equal(old.openRows.length, 0);
+});
+
+test('the General board takes uploads without touching the sheet', () => {
+  const w = world();
+  w.setToken();
+  const image = 'data:image/jpeg;base64,' + Buffer.from('jpeg').toString('base64');
+  const up = w.post({ action: 'upload', token: w.token, board: 'GENERAL', name: 'mood', note: 'Warm skin tones', image });
+  assert.equal(up.ok, true, up.error);
+  assert.deepEqual(w.plan.slice(1).map((r) => r[9]), ['', 'https://pinterest.com/pin/1', '', '']);
+  const week = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  assert.equal(week.boards.GENERAL.pins.length, 1);
+  assert.equal(week.boards.GENERAL.folderUrl, up.folderUrl);
+});
+
+test('stream sets Video Stream on the right row only', () => {
+  const w = world();
+  w.setToken();
+  const expect = { date: '2026-11-19', product: 'SPF', member: 'Luiz' };
+  const out = w.post({ action: 'stream', token: w.token, row: 4, expect, stream: 'Internal - CBQ' });
+  assert.equal(out.ok, true, out.error);
+  assert.equal(w.plan[3][18], 'Internal - CBQ');
+  assert.equal(out.row.stream, 'Internal - CBQ');
+  assert.equal(w.plan[2][18], '');
+  assert.match(w.post({ action: 'stream', token: w.token, row: 4, expect, stream: 'Massive' }).error, /Pick/);
+  assert.match(w.post({ action: 'stream', token: w.token, row: 2, expect, stream: 'External' }).error, /changed/);
 });

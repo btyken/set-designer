@@ -20,8 +20,11 @@ Props, products and designs are saved in each browser.
 - A **shoot** is the SHOOT PLAN rows with the same date, product and time block.
 - **Targets are per shoot.** The stream targets on OVERVIEW (Internal - Massive, Internal - CBQ, External) apply to each shoot that has people in that stream. A shoot card shows each stream's target, clips captured, how many more are needed, and whether the plan is short of the target. Rows with no Video Stream have no target until one is set.
 - The week cards add up the targets of all shoots in the week. Clips needed are counted shoot by shoot, so extra clips on one shoot do not cover another.
-- Each person's row shows planned, captured and QC-passed clips and how many they still have to shoot. **Report shots** writes Captured Clips, QC Passed Clips and Shoot Status into that person's SHOOT PLAN row.
-- The **moodboard** is one per shoot: the team uploads pegs, everyone on that shoot sees them. Photos live in a Drive folder; its link goes into Moodboard / Reference Link when that cell is empty.
+- **Team quotas**: each person's clips captured against their Planned Clips (e.g. 0 / 75), with how many are still to go.
+- Earlier shoots that are still short of their planned clips (and not Completed or Paused) are carried into the current week under **Still open from earlier weeks**, and count in the quotas.
+- Each person's row shows captured / quota and QC-passed clips. **Report shots** writes Captured Clips, QC Passed Clips and Shoot Status into that person's SHOOT PLAN row. Video Stream can be picked right on the row; it is saved to column S.
+- The **Moodboard** page collects every inspo photo for the week in one Pinterest-style board, filterable by shoot. Drop or pick photos to add them to a shoot's board, or to General inspo when they are not for one shoot. Each shoot card also shows its own photos.
+- Photos live in Drive, one folder per shoot. A shoot folder's link goes into Moodboard / Reference Link when that cell is empty.
 
 ### Code layout
 
@@ -67,7 +70,7 @@ The app talks to the tracker through a small script attached to the sheet. It ru
 
 After a code change to `Code.gs`, use **Deploy → Manage deployments → Edit → New version** so the URL stays the same.
 
-What the script touches: in SHOOT PLAN only Captured Clips, QC Passed Clips, Shoot Status, and Moodboard / Reference Link (only when empty). It never writes the (Auto) columns, RAW Folder Link or RAW REVIEW. Pegs go in a `BTY B-Roll Moodboards` folder next to the sheet, one subfolder per shoot, shared as view-only by link. The team passcode is the only key, so change it from the sheet menu if it leaks.
+What the script touches: in SHOOT PLAN only Captured Clips, QC Passed Clips, Shoot Status, Video Stream, and Moodboard / Reference Link (only when empty). It never writes the (Auto) columns, RAW Folder Link or RAW REVIEW. Pegs go in a `BTY B-Roll Moodboards` folder next to the sheet, one subfolder per shoot, shared as view-only by link. The team passcode is the only key, so change it from the sheet menu if it leaks.
 
 ## Publish the static site
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, shootLines, shootTotals, groupShoots, checkReport, isDriveFolder } from '../public/shoot-dashboard/tracker.js';
+import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, shootLines, shootTotals, groupShoots, memberQuotas, checkReport, isDriveFolder } from '../public/shoot-dashboard/tracker.js';
 
 test('weeks run Monday to Sunday', () => {
   assert.equal(mondayOf(new Date(2026, 10, 17)), '2026-11-16'); // Tuesday
@@ -95,4 +95,17 @@ test('app folders are told apart from pasted reference links', () => {
   assert.ok(isDriveFolder('https://drive.google.com/drive/folders/abc123'));
   assert.ok(isDriveFolder('https://drive.google.com/drive/u/0/folders/abc123'));
   assert.ok(!isDriveFolder('https://www.pinterest.com/pin/123'));
+});
+
+test('quotas are captured against planned, per person, with carried-over work', () => {
+  const rows = [
+    { member: 'Maye', planned: 75, captured: 20 },
+    { member: 'Maye', planned: 30, captured: null },
+    { member: 'Abe', planned: 45, captured: 50 },
+  ];
+  const open = [{ member: 'Abe', planned: 75, captured: 10 }];
+  const q = Object.fromEntries(memberQuotas(rows, open).map((m) => [m.member, m]));
+  assert.deepEqual([q.Maye.quota, q.Maye.captured, q.Maye.need, q.Maye.carried], [105, 20, 85, 0]);
+  assert.deepEqual([q.Abe.quota, q.Abe.captured, q.Abe.need, q.Abe.carried], [120, 60, 65, 65]);
+  assert.deepEqual(memberQuotas(rows, open).map((m) => m.member), ['Maye', 'Abe']);
 });

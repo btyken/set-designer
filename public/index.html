@@ -241,10 +241,19 @@
         </div>
       </div>
       <div id="shootConnect" hidden></div>
+      <div id="viewSwitch" class="seg view-switch" role="group" aria-label="View">
+        <button data-view="shoots" aria-pressed="true">Shoots &amp; quotas</button>
+        <button data-view="board" aria-pressed="false">Moodboard</button>
+      </div>
       <p id="shootMsg" class="shoot-msg" role="status"></p>
-      <div id="shootTargets" class="targets"></div>
-      <p id="shootUnassigned" class="note" hidden></p>
-      <div id="shootList" class="shoot-list"></div>
+      <div id="shootsView">
+        <section id="shootQuotas" hidden></section>
+        <h2 class="sub-head targets-head">Stream targets <small>per shoot, from OVERVIEW</small></h2>
+        <div id="shootTargets" class="targets"></div>
+        <p id="shootUnassigned" class="note" hidden></p>
+        <div id="shootList" class="shoot-list"></div>
+      </div>
+      <div id="boardView" hidden></div>
     </section>
   </main>
   </div>

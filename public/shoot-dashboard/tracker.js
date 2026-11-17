@@ -111,6 +111,28 @@ export function weekTotals(rows, targets = {}) {
   };
 }
 
+/**
+ * Each person's quota: the clips planned for them (Planned Clips) against what they have
+ * captured. `openRows` are earlier assignments still short of plan, carried into this week.
+ */
+export function memberQuotas(rows, openRows = []) {
+  const map = new Map();
+  const add = (r, carried) => {
+    const name = r.member || 'Unassigned';
+    if (!map.has(name)) map.set(name, { member: name, quota: 0, captured: 0, qcPassed: 0, need: 0, rows: 0, carried: 0 });
+    const m = map.get(name);
+    m.quota += n0(r.planned);
+    m.captured += n0(r.captured);
+    m.qcPassed += n0(r.qcPassed);
+    m.need += remaining(r);
+    m.rows += 1;
+    if (carried) m.carried += remaining(r);
+  };
+  rows.forEach((r) => add(r, false));
+  openRows.forEach((r) => add(r, true));
+  return [...map.values()].sort((a, b) => b.need - a.need || a.member.localeCompare(b.member));
+}
+
 /** Rows grouped into shoots (same date, product and time block), in date order. */
 export function groupShoots(rows) {
   const map = new Map();

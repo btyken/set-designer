@@ -114,3 +114,71 @@
 .sline .need.ok, .sline.met .need { color: var(--state); }
 .sline.met .bar-track .done { background: var(--state); }
 .sline .warn { font-size: 12px; color: var(--danger); }
+
+/* Shoots & quotas | Moodboard */
+.view-switch { display: flex; max-width: 420px; margin: -8px 0 10px; }
+.view-switch button { flex: 1; min-height: 44px; font-weight: 500; }
+.sub-head { font: 300 30px/1.1 var(--display); margin: 28px 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.sub-head small { font: 400 13px var(--sans); color: var(--muted); }
+.open-help { margin: -4px 0 12px; }
+.empty.slim { padding: 28px 20px; }
+
+/* Team quotas */
+#shootQuotas { margin-bottom: 8px; }
+#shootQuotas .sub-head, .targets-head { margin-top: 8px; }
+#shootQuotas { margin-bottom: 18px; }
+.quotas { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.quota { background: var(--raised); border: 1px solid var(--rule); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 4px; align-content: start; box-shadow: var(--lift); }
+.quota small { font-weight: 500; font-size: 15px; color: var(--ink); }
+.quota strong { font: 300 34px/1 var(--display); color: var(--ink); }
+.quota strong span { font-size: 22px; color: var(--muted); }
+.quota .need { font-size: 13px; font-weight: 500; color: var(--danger); }
+.quota.met .need { color: var(--state); }
+.quota.met .bar-track .done { background: var(--state); }
+.quota .warn { font-size: 12px; color: var(--danger); }
+.quota .muted { font-size: 12px; }
+.nums { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.nums .q dd { font-size: 20px; }
+.nums .q dd span { color: var(--muted); }
+
+/* Moodboard page: filters, drop zone, masonry */
+.filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; margin-bottom: 6px; }
+.filters::-webkit-scrollbar { display: none; }
+.fchip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--rule-strong); background: var(--raised); cursor: pointer; font-weight: 500; color: var(--ink); white-space: nowrap; }
+.fchip em { font: 400 12px var(--mono); font-style: normal; color: var(--muted); }
+.fchip b { font: 500 11px var(--mono); color: var(--muted); }
+.fchip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.fchip[aria-pressed="true"] em, .fchip[aria-pressed="true"] b { color: oklch(85% 0 0); }
+.board-sub { margin: 0 0 10px; }
+.board-sub a { color: var(--state); }
+.dropzone { display: grid; gap: 2px; justify-items: center; text-align: center; padding: 18px; margin-bottom: 14px; border: 1.5px dashed var(--rule-strong); border-radius: var(--r-md); background: var(--raised); cursor: pointer; color: var(--muted); }
+.dropzone strong { color: var(--ink); font-weight: 500; }
+.dropzone.over { border-color: var(--state); background: var(--state-pale); }
+.masonry { columns: 4 220px; column-gap: 12px; }
+.pin { break-inside: avoid; margin: 0 0 14px; display: grid; gap: 6px; }
+.pin-img { padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--deep); cursor: zoom-in; display: block; width: 100%; }
+.pin-img img { width: 100%; height: auto; display: block; min-height: 80px; }
+.pin figcaption { display: grid; gap: 1px; padding: 0 2px; }
+.pin-note { font-size: 14px; color: var(--ink); line-height: 1.35; }
+.pin-meta { font-size: 12px; color: var(--muted); }
+
+/* Pegs on a shoot card flow like the board too */
+.pegs { display: block; columns: 6 130px; column-gap: 10px; }
+.peg { break-inside: avoid; margin: 0 0 10px; }
+.peg-img { aspect-ratio: auto; display: block; width: 100%; border-radius: 10px; }
+.peg-img img { height: auto; min-height: 60px; }
+.board-head .board-open { margin-left: auto; }
+.board-head .board-open + label.btn { margin-left: 0; }
+
+@media (max-width: 640px) {
+  .view-switch { max-width: none; margin-top: 0; }
+  .quotas { grid-template-columns: 1fr 1fr; }
+  .masonry { columns: 2; column-gap: 8px; }
+  .pin { margin-bottom: 10px; }
+  .pegs { columns: 3; column-gap: 6px; }
+  .board-head > .btn { flex: 1; min-height: 44px; }
+}
+
+/* Video Stream picker on each person's row */
+.stream-pick { width: auto; max-width: 100%; min-height: 34px; padding: 4px 8px; font-size: 13px; color: var(--muted); background: transparent; border-color: var(--rule); justify-self: start; }
+.stream-pick.unset { color: var(--danger); border-color: var(--danger); }

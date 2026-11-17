@@ -24,6 +24,9 @@ const w = world({
     planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 40, 'Marie', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Pre-Shoot Approval': 'Pending', 'Shoot Status': 'Planned' }),
     planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 30, 'Luiz', { 'Content Type': 'Faceless with Model', 'Shoot Status': 'Planned' }),
     planRow(on(8), 'GLASS SKIN BUNDLE', 'External', 30, 'Lana', { 'Content Type': 'Faceless with Model', 'Shoot Status': 'Planned' }),
+    // An earlier shoot still short of plan: shows as carried over.
+    planRow(on(-31), '4EVER GLOW SET', 'Internal', 75, 'Joyce', { 'Captured Clips': 10 }),
+    planRow(on(-31), '4EVER GLOW SET', 'External', 75, 'Matt'),
   ],
 });
 w.setToken(); // passcode "team-pass"
@@ -34,7 +37,7 @@ for (const [i, note] of ['Low angle, bottle on the tallest block', 'Hand pump cl
   const file = path.join(ROOT, 'test', 'fixtures', `peg-${i + 1}.jpg`);
   if (!fs.existsSync(file)) continue;
   const image = 'data:image/jpeg;base64,' + fs.readFileSync(file).toString('base64');
-  w.post({ action: 'upload', token: w.token, board: first, name: `peg-${i + 1}`, note, by: i ? 'Maegan' : 'Maye', image });
+  w.post({ action: 'upload', token: w.token, board: i === 2 ? 'GENERAL' : first, name: `peg-${i + 1}`, note, by: i ? 'Maegan' : 'Maye', image });
 }
 
 function dayKey(d) {
