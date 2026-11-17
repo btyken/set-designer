@@ -3,7 +3,7 @@
 # Usage: SD_PASSCODE='team passcode' SD_TRACKER_URL='https://script.google.com/macros/s/.../exec' npm run deploy
 set -e
 cd "$(dirname "$0")/.."
-if [ -z "$SD_PASSCODE" ]; then
+if [ -z "$SD_PASSCODE" ] && [ -z "$SD_PASS_HASH" ]; then
   echo "Set SD_PASSCODE to the team passcode first." >&2
   exit 1
 fi

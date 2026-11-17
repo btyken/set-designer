@@ -23,10 +23,12 @@ for (const rel of [
   fs.copyFileSync(path.join(three, rel), to);
 }
 const pass = (process.env.SD_PASSCODE || '').trim();
-const config = pass ? { passHash: createHash('sha256').update(pass).digest('hex') } : {};
+// SD_PASS_HASH reuses the hash already published (from dist/config.js) without retyping the passcode.
+const passHash = pass ? createHash('sha256').update(pass).digest('hex') : (process.env.SD_PASS_HASH || '').trim();
+const config = passHash ? { passHash } : {};
 // The B-roll tracker web app (see apps-script/). Without it, each person pastes the link once in Shoots.
 const trackerUrl = (process.env.SD_TRACKER_URL || '').trim();
 if (trackerUrl) config.trackerUrl = trackerUrl;
 fs.writeFileSync(path.join(dist, 'config.js'), `window.SD_CONFIG = ${JSON.stringify(config)};\n`);
 fs.writeFileSync(path.join(dist, '.nojekyll'), '');
-console.log(`Built ${dist}${pass ? ' with a passcode gate' : ' with no passcode'}${trackerUrl ? ', linked to the B-roll tracker' : ', no tracker link'}`);
+console.log(`Built ${dist}${passHash ? ' with a passcode gate' : ' with no passcode'}${trackerUrl ? ', linked to the B-roll tracker' : ', no tracker link'}`);

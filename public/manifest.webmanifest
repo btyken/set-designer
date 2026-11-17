@@ -1,7 +1,7 @@
 {
-  "name": "Set Designer",
-  "short_name": "Set Designer",
-  "start_url": ".",
+  "name": "B-roll Production Tools",
+  "short_name": "B-roll Tools",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f8f8f8",
   "theme_color": "#f8f8f8",

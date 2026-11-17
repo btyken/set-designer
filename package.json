@@ -1,7 +1,7 @@
 {
-  "name": "set-designer",
+  "name": "b-roll-production-tools",
   "version": "1.0.0",
-  "description": "",
+  "description": "Set Designer and Shoot Dashboard for BTY B-roll production",
   "main": "index.js",
   "scripts": {
     "test": "node --test",

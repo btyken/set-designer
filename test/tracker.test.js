@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, groupShoots, checkReport, isDriveFolder } from '../public/tracker.js';
+import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, shootLines, shootTotals, groupShoots, checkReport, isDriveFolder } from '../public/shoot-dashboard/tracker.js';
 
 test('weeks run Monday to Sunday', () => {
   assert.equal(mondayOf(new Date(2026, 10, 17)), '2026-11-16'); // Tuesday
@@ -34,22 +34,40 @@ const ROWS = [
 ];
 const TARGETS = { 'Internal - Massive': 90, 'Internal - CBQ': 90, External: 60 };
 
-test('weekly totals match the tracker overview', () => {
+test('targets apply to each shoot, stream by stream', () => {
+  const [b, a] = groupShoots(ROWS);
+  const lines = shootLines(a, TARGETS);
+  assert.deepEqual(lines.map((l) => l.name), ['Internal - Massive', 'External', 'Internal - Unassigned']);
+  const [massive, external, unassigned] = lines;
+  assert.deepEqual([massive.target, massive.captured, massive.need, massive.unplanned], [90, 60, 30, 15]);
+  assert.deepEqual([external.target, external.captured, external.need, external.unplanned], [60, 45, 15, 20]);
+  assert.deepEqual([unassigned.target, unassigned.planned, unassigned.need], [0, 75, 0]);
+  const t = shootTotals(a, TARGETS);
+  assert.deepEqual([t.target, t.captured, t.need], [150, 105, 45]);
+  assert.equal(shootTotals(b, TARGETS).need, 80);
+});
+
+test('the week adds up each shoot target', () => {
   const t = weekTotals(ROWS, TARGETS);
-  assert.equal(t.internal.target, 180);
-  assert.equal(t.internal.planned, 180);
-  assert.equal(t.internal.captured, 70);
-  assert.equal(t.internal.need, 110);
-  assert.equal(t.internal.unplanned, 0);
-  assert.equal(t.massive.captured, 60);
-  assert.equal(t.massive.need, 30);
-  assert.equal(t.massive.unplanned, 15);
-  assert.equal(t.cbq.unplanned, 60);
-  assert.equal(t.external.captured, 45);
-  assert.equal(t.external.need, 15);
-  assert.equal(t.external.unplanned, 20);
+  assert.deepEqual([t.massive.target, t.massive.need, t.massive.shoots], [90, 30, 1]);
+  assert.deepEqual([t.cbq.target, t.cbq.need, t.cbq.unplanned], [90, 80, 60]);
+  assert.deepEqual([t.external.target, t.external.captured, t.external.need], [60, 45, 15]);
+  assert.deepEqual([t.internal.target, t.internal.planned, t.internal.captured, t.internal.need], [180, 180, 70, 110]);
+  assert.equal(t.internal.shoots, 2);
   assert.equal(t.unassigned.rows, 1);
   assert.equal(t.unassigned.planned, 75);
+});
+
+test('extra clips on one shoot do not cover another shoot', () => {
+  const rows = [
+    { board: 'x', date: '2026-11-17', product: 'A', stream: 'Internal - Massive', audience: 'Internal', planned: 90, captured: 120 },
+    { board: 'y', date: '2026-11-18', product: 'B', stream: 'Internal - Massive', audience: 'Internal', planned: 90, captured: 0 },
+  ];
+  const t = weekTotals(rows, TARGETS);
+  assert.equal(t.massive.target, 180);
+  assert.equal(t.massive.captured, 120);
+  assert.equal(t.massive.need, 90);
+  assert.equal(t.massive.shoots, 2);
 });
 
 test('a stream with no target needs nothing', () => {

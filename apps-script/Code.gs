@@ -1,10 +1,10 @@
 /**
- * Set Designer ⇄ BTY B-Roll Tracker bridge.
+ * B-roll Production Tools ⇄ BTY B-Roll Tracker bridge.
  *
  * Paste this into the tracker sheet (Extensions → Apps Script) as a new file,
  * then deploy it as a web app. Setup steps are in the app's README.
  *
- * What it does for the Set Designer app:
+ * What it does for the app's Shoot Dashboard:
  *  - reads one week of SHOOT PLAN rows and the weekly targets on OVERVIEW
  *  - writes Captured Clips, QC Passed Clips and Shoot Status for one row
  *  - keeps one Drive folder of inspiration photos ("pegs") per shoot and puts
@@ -46,7 +46,7 @@ const SD = {
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('Set Designer')
+    .createMenu('B-roll Tools')
     .addItem('Set team passcode…', 'sdSetPasscode')
     .addItem('Open moodboards folder', 'sdShowRoot')
     .addToUi();
@@ -54,7 +54,7 @@ function onOpen() {
 
 function sdSetPasscode() {
   const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt('Team passcode', 'Use the same passcode the team types to open Set Designer.', ui.ButtonSet.OK_CANCEL);
+  const res = ui.prompt('Team passcode', 'Use the same passcode the team types to open B-roll Production Tools.', ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
   const pass = res.getResponseText().trim();
   if (pass.length < 6) {
@@ -62,7 +62,7 @@ function sdSetPasscode() {
     return;
   }
   PropertiesService.getScriptProperties().setProperty('API_TOKEN', sdHash_('sd-api:' + pass));
-  ui.alert('Saved. Set Designer can now read and update this tracker.');
+  ui.alert('Saved. B-roll Production Tools can now read and update this tracker.');
 }
 
 function sdShowRoot() {
@@ -73,7 +73,7 @@ function sdShowRoot() {
 // ---------- Web app entry ----------
 
 function doGet() {
-  return sdJson_({ ok: true, app: 'set-designer-tracker' });
+  return sdJson_({ ok: true, app: 'broll-tools-tracker' });
 }
 
 function doPost(e) {
@@ -84,7 +84,7 @@ function doPost(e) {
     return sdJson_({ ok: false, error: 'Bad request.' });
   }
   const want = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
-  if (!want) return sdJson_({ ok: false, error: 'The tracker has no team passcode yet. Set it from the Set Designer menu in the sheet.' });
+  if (!want) return sdJson_({ ok: false, error: 'The tracker has no team passcode yet. Set it from the B-roll Tools menu in the sheet.' });
   if (body.token !== want) return sdJson_({ ok: false, auth: true, error: 'Wrong team passcode.' });
 
   const routes = { ping: sdPing_, week: sdWeek_, report: sdReport_, upload: sdUpload_, remove: sdRemove_, image: sdImage_ };

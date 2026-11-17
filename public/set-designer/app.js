@@ -1,10 +1,11 @@
+// Set Designer: photograph props and products, describe the set, get three designs with
+// lighting plans and sample frames. Started by main.js with initSetDesigner().
 import { openMeasure, cutoutFromUrl } from './measure.js';
 import { SetScene } from './scene.js';
 import { localDesigns, FURNITURE } from './rules.js';
 import { CATEGORIES, MATERIALS, STATUSES, statusOf, statusName, usable, suggestUses, findDuplicates, matchesFilter } from './props.js';
-import { $, h } from './dom.js';
-import { initShoots, showShoots, pinImage, canPin } from './shoots.js';
-import { tracker, tokenFor } from './tracker.js';
+import { $, h } from '../shared/dom.js';
+import { onPhone, shareImage } from '../shared/lightbox.js';
 
 const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
 const FRAMES = ['16:9', '4:5', '1:1', '9:16'];
@@ -97,20 +98,6 @@ const state = {
 };
 const openEditors = new Set();
 let howTouched = false;
-const onPhone = () => matchMedia('(pointer: coarse)').matches;
-
-/** Opens the phone share sheet for an image (save to Photos, send in chat). False if unsupported. */
-async function shareImage(url, filename, title) {
-  try {
-    const blob = await (await fetch(url)).blob();
-    const file = new File([blob], filename, { type: blob.type });
-    if (!navigator.canShare?.({ files: [file] })) return false;
-    await navigator.share({ files: [file], title });
-    return true;
-  } catch (err) {
-    return err?.name === 'AbortError'; // closing the sheet is not a failure
-  }
-}
 let scene;
 const saveItems = () => save('items', state.items);
 const saveProducts = () => save('products', state.products);
@@ -161,61 +148,26 @@ async function api(path, body) {
   return data;
 }
 
-// ---------- Passcode gate (static hosting) ----------
-
-async function sha256(text) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-function passGate() {
-  const want = window.SD_CONFIG?.passHash;
-  if (!want) return Promise.resolve();
-  try {
-    if (localStorage.getItem('sd-pass') === want) return Promise.resolve();
-  } catch { /* fall through to the form */ }
-  return new Promise((resolve) => {
-    $('gate').hidden = false;
-    $('gateInput').focus();
-    $('gateForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if ((await sha256($('gateInput').value.trim())) === want) {
-        try { localStorage.setItem('sd-pass', want); } catch { /* not remembered */ }
-        // The same passcode unlocks the tracker, so nobody has to type it twice.
-        if (!tracker.token) tracker.setToken(await tokenFor($('gateInput').value));
-        $('gate').hidden = true;
-        resolve();
-      } else {
-        $('gateMsg').textContent = 'That passcode is not right. Check with the team and try again.';
-        $('gateInput').select();
-      }
-    });
-  });
-}
-
 // ---------- Steps and bottom bar ----------
 
 function goto(step) {
   state.step = step;
-  for (const s of ['items', 'brief', 'designs', 'shoots']) $(`step-${s}`).hidden = s !== step;
+  for (const s of ['items', 'brief', 'designs']) $(`step-${s}`).hidden = s !== step;
   for (const b of document.querySelectorAll('.steps button')) {
     b.setAttribute('aria-current', String(b.dataset.step === step));
     const done = (b.dataset.step === 'items' && state.items.length + state.products.length > 0) || (b.dataset.step === 'designs' && state.designs.length > 0);
     b.classList.toggle('done', done && b.dataset.step !== step);
   }
-  // The Shoots screen has its own address so the team can bookmark it.
-  const hash = step === 'shoots' ? '#shoots' : '';
-  if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
   renderBar();
   window.scrollTo(0, 0);
   if (step === 'designs') renderDesigns();
-  if (step === 'shoots') showShoots();
 }
 
 function renderBar() {
   const text = $('barText');
   const next = $('barNext');
   const back = $('barBack');
-  $('bar').hidden = state.step === 'designs' || state.step === 'shoots';
+  $('bar').hidden = state.step === 'designs';
   text.className = state.message?.error ? 'error' : '';
   const n = state.items.filter(usable).length;
   const off = state.items.length - n;
@@ -691,22 +643,6 @@ const where = (o) => {
   return [part(o.x_cm, 'left', 'right'), part(o.z_cm, 'back', 'forward')].filter(Boolean).join(' · ') || 'centre of the set';
 };
 
-function openLightbox(shot, name, opts = {}) {
-  $('lbPin').hidden = !(opts.pin !== false && canPin());
-  $('lbPin').onclick = () => { $('lightbox').hidden = true; pinImage(shot.url, opts.pinNote || shot.name); };
-  $('lbDel').hidden = !opts.onDelete;
-  $('lbDel').onclick = async () => { if (await opts.onDelete()) $('lightbox').hidden = true; };
-  $('lbTitle').textContent = shot.name;
-  $('lbImg').src = shot.url;
-  $('lbImg').alt = `${shot.name} mockup`;
-  $('lbSave').href = shot.url;
-  const file = `${name}-${shot.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.jpg`;
-  $('lbSave').download = file;
-  $('lbShare').hidden = !(onPhone() && navigator.canShare);
-  $('lbShare').onclick = async () => { if (!(await shareImage(shot.url, file, shot.name))) $('lbSave').click(); };
-  $('lightbox').hidden = false;
-}
-
 async function renderDesigns() {
   const has = state.designs.length > 0;
   $('designEmpty').hidden = has;
@@ -738,7 +674,7 @@ async function renderDesigns() {
   const shots = scene.renderShots();
   const slug = `set-option-${index + 1}`;
   $('mockups').replaceChildren(...shots.map((shot) => h('figure', {},
-    h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => openLightbox(shot, slug, { pinNote: `Set design: ${d.name}, ${shot.name}${shot.cam ? `. ${shot.cam}` : ''}` }) },
+    h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => tool.openLightbox({ ...shot, alt: `${shot.name} mockup` }, slug, { onPin: tool.pinToShoot(shot.url, `Set design: ${d.name}, ${shot.name}${shot.cam ? `. ${shot.cam}` : ''}`) }) },
       h('img', { src: shot.url, alt: `${shot.name} mockup`, width: shot.w, height: shot.h })),
     h('figcaption', {}, h('strong', {}, shot.name), h('span', {}, shot.note), shot.cam && h('span', { class: 'cam' }, shot.cam)),
   )));
@@ -788,10 +724,18 @@ function renderDetails(d, brief) {
   ].filter(Boolean));
 }
 
-// ---------- Boot ----------
+// ---------- Start ----------
 
-async function boot() {
-  await passGate();
+/** Hooks from main.js: the shared picture viewer, and pinning a frame to a shoot (null when not connected). */
+const tool = { openLightbox: () => {}, pinToShoot: () => null };
+
+/** The Set Designer becomes visible: show whichever step the person was on. */
+export function showSetDesigner() {
+  goto(state.step);
+}
+
+export async function initSetDesigner(hooks = {}) {
+  Object.assign(tool, hooks);
   bindBrief();
   for (const b of document.querySelectorAll('.steps button')) b.addEventListener('click', () => goto(b.dataset.step));
   for (const b of document.querySelectorAll('[data-goto]')) b.addEventListener('click', () => goto(b.dataset.goto));
@@ -824,9 +768,6 @@ async function boot() {
     if (onPhone() && (await shareImage(url, file, 'Set plan'))) return;
     h('a', { href: url, download: file }).click();
   });
-  $('lbClose').addEventListener('click', () => { $('lightbox').hidden = true; });
-  $('lightbox').addEventListener('click', (e) => { if (e.target === $('lightbox')) $('lightbox').hidden = true; });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('lightbox').hidden = true; });
 
   const [items, brief, designs, products] = await Promise.all([load('items'), load('brief'), load('designs'), load('products')]);
   if (Array.isArray(items)) state.items = items.map(({ pending, ...it }) => it);
@@ -866,13 +807,9 @@ async function boot() {
   if (onPhone()) $('planHint').textContent = 'swipe sideways to turn, pinch to zoom';
   const chip = $('brain');
   chip.textContent = state.ai ? 'Claude AI on' : 'Built-in rules';
-  chip.className = 'tag' + (state.ai ? ' on' : '');
+  chip.classList.toggle('on', state.ai);
 
   renderItems();
   renderBrief();
-  initShoots({ openLightbox });
-  goto(location.hash === '#shoots' ? 'shoots' : 'items');
   backfillCutouts();
 }
-
-boot();

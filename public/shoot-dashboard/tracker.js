@@ -50,28 +50,63 @@ const n0 = (v) => (Number.isFinite(v) ? v : 0);
 /** Clips still to capture on one row. */
 export const remaining = (r) => Math.max(0, n0(r.planned) - n0(r.captured));
 
-/** Totals per stream for a set of rows, plus the combined internal line the tracker reports. */
+const STREAM_ORDER = [...STREAMS, 'Internal - Unassigned'];
+
+/**
+ * One shoot, line by line for each stream it has people in. The OVERVIEW targets apply to
+ * each shoot: a shoot with Massive rows owes the Massive target, and so on. Rows with no
+ * Video Stream have no target until one is set.
+ */
+export function shootLines(shoot, targets = {}) {
+  const lines = new Map();
+  for (const r of shoot.rows) {
+    const name = streamOf(r);
+    if (!lines.has(name)) {
+      const target = name === 'Internal - Unassigned' ? 0 : n0(targets[name]);
+      lines.set(name, { name, target, planned: 0, captured: 0, qcPassed: 0, rows: 0 });
+    }
+    const l = lines.get(name);
+    l.planned += n0(r.planned);
+    l.captured += n0(r.captured);
+    l.qcPassed += n0(r.qcPassed);
+    l.rows += 1;
+  }
+  return [...lines.values()]
+    .sort((a, b) => STREAM_ORDER.indexOf(a.name) - STREAM_ORDER.indexOf(b.name))
+    .map((l) => ({ ...l, need: Math.max(0, l.target - l.captured), unplanned: Math.max(0, l.target - l.planned) }));
+}
+
+/** A shoot's lines added up. */
+export function shootTotals(shoot, targets = {}) {
+  const lines = shootLines(shoot, targets);
+  const sum = (k) => lines.reduce((a, l) => a + l[k], 0);
+  return { lines, target: sum('target'), planned: sum('planned'), captured: sum('captured'), qcPassed: sum('qcPassed'), need: sum('need'), unplanned: sum('unplanned') };
+}
+
+/**
+ * The week, stream by stream: each shoot's target added up across the shoots that have that
+ * stream. "Need" is added shoot by shoot, so extra clips on one shoot do not cover another.
+ */
 export function weekTotals(rows, targets = {}) {
-  const blank = () => ({ planned: 0, captured: 0, qcPassed: 0, rows: 0 });
-  const by = Object.fromEntries([...STREAMS, 'Internal - Unassigned'].map((s) => [s, blank()]));
-  for (const r of rows) {
-    const t = by[streamOf(r)];
-    t.planned += n0(r.planned);
-    t.captured += n0(r.captured);
-    t.qcPassed += n0(r.qcPassed);
-    t.rows += 1;
+  const blank = (name) => ({ name, target: 0, planned: 0, captured: 0, qcPassed: 0, need: 0, unplanned: 0, rows: 0, shoots: 0 });
+  const by = Object.fromEntries(STREAM_ORDER.map((s) => [s, blank(s)]));
+  for (const shoot of groupShoots(rows)) {
+    for (const l of shootLines(shoot, targets)) {
+      const t = by[l.name];
+      for (const k of ['target', 'planned', 'captured', 'qcPassed', 'need', 'unplanned', 'rows']) t[k] += l[k];
+      t.shoots += 1;
+    }
   }
-  const internal = blank();
+  const internal = blank('Internal (Massive + CBQ)');
   for (const s of ['Internal - Massive', 'Internal - CBQ', 'Internal - Unassigned']) {
-    for (const k of Object.keys(internal)) internal[k] += by[s][k];
+    for (const k of Object.keys(internal)) if (k !== 'name' && k !== 'shoots') internal[k] += by[s][k];
   }
-  const tgt = (s) => n0(targets[s]);
-  const line = (name, t, target) => ({ name, ...t, target, need: Math.max(0, target - t.captured), unplanned: Math.max(0, target - t.planned) });
+  internal.shoots = new Set(rows.filter((r) => isInternal(streamOf(r))).map((r) => r.board)).size;
   return {
-    internal: line('Internal (Massive + CBQ)', internal, tgt('Internal - Massive') + tgt('Internal - CBQ')),
-    massive: line('Internal - Massive', by['Internal - Massive'], tgt('Internal - Massive')),
-    cbq: line('Internal - CBQ', by['Internal - CBQ'], tgt('Internal - CBQ')),
-    external: line('External', by.External, tgt('External')),
+    internal,
+    massive: by['Internal - Massive'],
+    cbq: by['Internal - CBQ'],
+    external: by.External,
     unassigned: by['Internal - Unassigned'],
   };
 }

@@ -1,4 +1,4 @@
-// Try the Shoots screen without Google: serves the app with a pretend tracker sheet in memory.
+// Try the Shoot Dashboard without Google: serves the app with a pretend tracker sheet in memory.
 // Usage: npm run mock   → open http://localhost:4811/#shoots, passcode "team-pass".
 // Nothing here touches the real tracker. Restarting the script resets the data.
 import http from 'node:http';
@@ -21,7 +21,7 @@ const w = world({
     planRow(on(1), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Captured Clips': 60, 'QC Passed Clips': 52, 'Shoot Status': 'QC', 'Pre-Shoot Approval': 'Approved', 'Set / Lighting / Props / Angles': 'White sweep, stepped blocks, warm rim from back left', 'Member Shoot Task': 'Hero bottle turns + texture swatches' }),
     planRow(on(1), '4EVER GLOW SET', 'Internal', 45, 'Abe', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - CBQ', 'Captured Clips': 20, 'Shoot Status': 'Shooting', 'Pre-Shoot Approval': 'Approved' }),
     planRow(on(1), '4EVER GLOW SET', 'External', 60, 'Maegan', { 'Content Type': 'Faceless with Model', 'Captured Clips': 38, 'Pre-Shoot Approval': 'Approved', 'Moodboard / Reference Link': 'https://www.pinterest.com/pin/000000/' }),
-    planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 40, 'Marie', { 'Content Type': 'Product Shots', 'Pre-Shoot Approval': 'Pending', 'Shoot Status': 'Planned' }),
+    planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 40, 'Marie', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Pre-Shoot Approval': 'Pending', 'Shoot Status': 'Planned' }),
     planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 30, 'Luiz', { 'Content Type': 'Faceless with Model', 'Shoot Status': 'Planned' }),
     planRow(on(8), 'GLASS SKIN BUNDLE', 'External', 30, 'Lana', { 'Content Type': 'Faceless with Model', 'Shoot Status': 'Planned' }),
   ],

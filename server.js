@@ -1,4 +1,4 @@
-// Set Designer server: serves the web app and proxies design requests to Claude.
+// B-roll Production Tools server: serves the web app and proxies Set Designer requests to Claude.
 // The API key stays on this machine; the browser never sees it.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -423,7 +423,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Set Designer running at http://localhost:${PORT}`);
+  console.log(`B-roll Production Tools running at http://localhost:${PORT}`);
   for (const list of Object.values(os.networkInterfaces())) {
     for (const ni of list || []) {
       if (ni.family === 'IPv4' && !ni.internal) console.log(`  On your phone (same Wi-Fi): http://${ni.address}:${PORT}`);

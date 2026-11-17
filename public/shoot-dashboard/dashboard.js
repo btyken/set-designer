@@ -1,9 +1,10 @@
-// Shoots: this week's B-roll shoots from the tracker sheet, how many clips are still needed,
-// a place to report shots after the shoot, and a moodboard of pegs for each shoot.
-import { $, h, openSheet } from './dom.js';
+// Shoot Dashboard: the week's B-roll shoots from the tracker sheet, how many clips each shoot
+// still needs against its target, shot reports after the shoot, and a moodboard per shoot.
+// Started by main.js with initDashboard().
+import { $, h, openSheet } from '../shared/dom.js';
 import {
   STATUSES, tracker, tokenFor, call, mondayOf, addDays, weekLabel, dayLabel, streamOf, remaining,
-  weekTotals, groupShoots, checkReport,
+  weekTotals, shootTotals, groupShoots, checkReport,
 } from './tracker.js';
 
 const S = {
@@ -19,7 +20,7 @@ const thumbUrl = (id, w = 800) => `https://drive.google.com/thumbnail?id=${encod
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const num = (v) => (Number.isFinite(v) ? v : null);
 
-export function initShoots({ openLightbox }) {
+export function initDashboard({ openLightbox }) {
   S.lightbox = openLightbox;
   $('wkPrev').addEventListener('click', () => setWeek(addDays(S.week, -7)));
   $('wkNext').addEventListener('click', () => setWeek(addDays(S.week, 7)));
@@ -30,7 +31,7 @@ export function initShoots({ openLightbox }) {
 /** Can a picture be pinned to a shoot from here? Only when the tracker is set up. */
 export const canPin = () => tracker.ready;
 
-export function showShoots() {
+export function showDashboard() {
   if (!tracker.ready) return renderConnect();
   $('shootConnect').hidden = true;
   document.querySelector('.wk-nav').hidden = false;
@@ -107,7 +108,7 @@ function renderConnect(error = '') {
       if (!tracker.urlFromConfig) tracker.setUrl(link);
       tracker.setToken(token);
       tracker.setName(name.value.trim());
-      showShoots();
+      showDashboard();
     } catch (err) {
       msg.textContent = err.message;
       btn.disabled = false;
@@ -153,15 +154,15 @@ function renderTargets(data) {
       line.target > 0 && h('div', { class: 'bar-track', role: 'img', 'aria-label': `${line.captured} of ${line.target} captured, ${line.planned} planned` },
         h('i', { class: 'planned', style: `width:${pct(line.planned)}%` }),
         h('i', { class: 'done', style: `width:${pct(line.captured)}%` })),
-      h('p', { class: 'need' }, !line.target ? 'No weekly target on the tracker.' : met ? 'Target reached.' : `${plural(line.need, 'more clip')} needed this week.`),
-      h('p', { class: 'muted' }, `Planned ${line.planned} · QC passed ${line.qcPassed}`),
-      line.target > 0 && line.unplanned > 0 && h('p', { class: 'warn' }, `Only ${line.planned} planned. Plan ${line.unplanned} more to reach the target.`));
+      h('p', { class: 'need' }, !line.shoots ? 'No shoots this week.' : !line.target ? 'No target on the tracker.' : met ? 'Every shoot hit its target.' : `${plural(line.need, 'more clip')} needed.`),
+      h('p', { class: 'muted' }, line.shoots ? `${plural(line.shoots, 'shoot')} · planned ${line.planned} · QC passed ${line.qcPassed}` : ''),
+      line.target > 0 && line.unplanned > 0 && h('p', { class: 'warn' }, `${line.unplanned} short of target in the plan.`));
   };
   $('shootTargets').replaceChildren(card(t.internal, true), card(t.massive), card(t.cbq), card(t.external, true));
   const un = t.unassigned;
   $('shootUnassigned').hidden = un.rows === 0;
   $('shootUnassigned').textContent = un.rows
-    ? `${plural(un.rows, 'internal assignment')} (${un.planned} planned clips) ${un.rows === 1 ? 'has' : 'have'} no Video Stream yet, so ${un.rows === 1 ? 'it counts' : 'they count'} toward the internal total but not toward Massive or CBQ. Set Video Stream in SHOOT PLAN.`
+    ? `${plural(un.rows, 'internal assignment')} (${un.planned} planned clips) ${un.rows === 1 ? 'has' : 'have'} no Video Stream yet, so ${un.rows === 1 ? 'it has' : 'they have'} no target. Set Video Stream in SHOOT PLAN to Massive or CBQ.`
     : '';
 }
 
@@ -179,9 +180,7 @@ function renderList(data) {
 
 function shootCard(s, data) {
   const board = data.boards?.[s.key] || { pins: [], folderUrl: '' };
-  const planned = s.rows.reduce((a, r) => a + (num(r.planned) || 0), 0);
-  const captured = s.rows.reduce((a, r) => a + (num(r.captured) || 0), 0);
-  const left = s.rows.reduce((a, r) => a + remaining(r), 0);
+  const tot = shootTotals(s, data.targets);
   const uniq = (key) => [...new Set(s.rows.map((r) => r[key]).filter(Boolean))];
   const refs = uniq('moodLink').filter((u) => u !== board.folderUrl); // links someone pasted, not the app's own folder
   const raws = uniq('rawFolder');
@@ -197,9 +196,10 @@ function shootCard(s, data) {
           uniq('contentType').map((c) => h('span', { class: 'chip' }, c)),
           uniq('approval').map((a) => h('span', { class: 'chip' + (a === 'Approved' ? ' ok' : a === 'Rejected' ? ' bad' : '') }, `Pre-shoot: ${a}`)),
           !uniq('approval').length && h('span', { class: 'chip' }, 'Pre-shoot: not reviewed'))),
-      h('div', { class: 'shoot-sum' + (planned && !left ? ' met' : '') },
-        h('strong', {}, `${captured}`, h('span', {}, ` / ${planned}`)),
-        h('span', {}, planned ? (left ? `clips captured · ${left} to go` : 'clips captured · all planned clips done') : 'no clips planned yet'))),
+      h('div', { class: 'shoot-sum' + (tot.target && !tot.need ? ' met' : '') },
+        h('strong', {}, `${tot.captured}`, h('span', {}, tot.target ? ` / ${tot.target}` : '')),
+        h('span', {}, tot.target ? (tot.need ? `clips vs target · ${tot.need} more needed` : 'clips vs target · target hit') : 'clips captured · no target yet'))),
+    h('div', { class: 'stream-lines' }, tot.lines.map((l) => streamLine(l))),
     setNotes.length > 0 && h('p', { class: 'set-notes' }, h('b', {}, 'Set, lighting, props, angles: '), setNotes.join(' / ')),
     h('div', { class: 'crew' }, s.rows.map((r) => crewRow(r))),
     h('section', { class: 'board' },
@@ -215,6 +215,23 @@ function shootCard(s, data) {
       board.pins.length
         ? h('div', { class: 'pegs' }, board.pins.map((p) => pegFigure(p, s)))
         : h('p', { class: 'help peg-empty' }, 'Add photos of the look to copy on set: angles, lighting, styling, hand poses. Everyone on this shoot sees the same board.')));
+}
+
+/** One stream's target on this shoot. */
+function streamLine(l) {
+  const pct = (v) => (l.target ? Math.min(100, (v / l.target) * 100) : 0);
+  if (!l.target) {
+    return h('div', { class: 'sline none' },
+      h('small', {}, l.name === 'Internal - Unassigned' ? 'Internal, no stream' : l.name),
+      h('strong', {}, `${l.captured}`, h('span', {}, ` captured · ${l.planned} planned`)),
+      h('p', { class: 'warn' }, l.name === 'Internal - Unassigned' ? 'No target until Video Stream is set.' : 'No target on the tracker.'));
+  }
+  return h('div', { class: 'sline' + (l.need ? '' : ' met') },
+    h('small', {}, l.name),
+    h('strong', {}, `${l.captured}`, h('span', {}, ` / ${l.target}`)),
+    h('div', { class: 'bar-track' }, h('i', { class: 'planned', style: `width:${pct(l.planned)}%` }), h('i', { class: 'done', style: `width:${pct(l.captured)}%` })),
+    h('p', { class: l.need ? 'need' : 'need ok' }, l.need ? `${l.need} more needed` : 'Target hit'),
+    l.unplanned > 0 && h('p', { class: 'warn' }, `Plan has ${l.planned}, ${l.unplanned} short`));
 }
 
 function crewRow(r) {
@@ -316,7 +333,6 @@ function pegFigure(p, s) {
 function openPeg(p, s) {
   const url = images.get(p.id) || thumbUrl(p.id, 2000);
   S.lightbox({ name: p.note || s.product, url }, `peg-${p.id}`, {
-    pin: false,
     onDelete: async () => {
       if (!confirm('Remove this peg from the moodboard? It moves to the Drive trash.')) return false;
       try {

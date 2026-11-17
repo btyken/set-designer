@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CATEGORIES, usable, statusOf, suggestUses, findDuplicates, matchesFilter } from '../public/props.js';
-import { localDesigns } from '../public/rules.js';
+import { CATEGORIES, usable, statusOf, suggestUses, findDuplicates, matchesFilter } from '../public/set-designer/props.js';
+import { localDesigns } from '../public/set-designer/rules.js';
 
 const prop = (id, o = {}) => ({ id, name: id, w: 10, h: 20, d: 10, shape: 'box', colors: ['#808080'], ...o });
 const brief = { setType: 'tabletop', roomW: 120, roomD: 70, person: 'none', camera: 'front', frame: '16:9', mood: 'BTY studio', brand: [], furniture: {} };
