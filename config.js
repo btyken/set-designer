@@ -1,0 +1,1 @@
+window.SD_CONFIG = {"passHash":"f9a31cbd760c298ffb6fefaa8e56577582f89491f3298885074cc8ca30dda527","trackerUrl":"https://script.google.com/macros/s/AKfycbyIcDJXOshxg-1xdx6Nt7jOZyk2FcJpu3OwsJ8F0lobk6QGoNyFEbtnkqYNQj1poD6wQw/exec"};
