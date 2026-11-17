@@ -43,6 +43,7 @@ export function world({ rows, review = [], catalog, catalogBlank = 5 } = {}) {
     isTrashed() { return this.trashed; }
     setDescription(d) { this.desc = d; }
     setSharing(a, p) { this.sharing = [a, p]; }
+    getSharingAccess() { return this.sharing ? this.sharing[0] : 'private'; }
     createFolder(name) { return new Folder(name, this); }
     createFile(blob) { return new File(blob, this); }
     getFiles() { return iter([...items.values()].filter((f) => f instanceof File && f.parent === this && !f.trashed)); }
@@ -55,7 +56,7 @@ export function world({ rows, review = [], catalog, catalogBlank = 5 } = {}) {
     getParents() { return iter([this.parent]); }
     getDescription() { return this.desc; }
     setDescription(d) { this.desc = d; }
-    setSharing() {}
+    setSharing(a, p) { this.sharing = [a, p]; }
     setTrashed(v) { this.trashed = v; }
     getDateCreated() { return this.created; }
     getBlob() { return { getContentType: () => this.blob.type, getBytes: () => this.blob.bytes }; }

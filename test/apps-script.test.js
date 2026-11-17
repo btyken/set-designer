@@ -152,3 +152,33 @@ test('stream sets Video Stream on the right row only', () => {
   assert.match(w.post({ action: 'stream', token: w.token, row: 4, expect, stream: 'Massive' }).error, /Pick/);
   assert.match(w.post({ action: 'stream', token: w.token, row: 2, expect, stream: 'External' }).error, /changed/);
 });
+
+test('later uploads skip the sheet unless the app asks, and files lean on the folder sharing', () => {
+  const w = world();
+  w.setToken();
+  const week = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  const board = week.rows[0].board;
+  const image = 'data:image/jpeg;base64,' + Buffer.from('fake-jpeg').toString('base64');
+  const a = w.post({ action: 'upload', token: w.token, board, image });
+  assert.equal(w.plan[1][9], a.folderUrl); // new folder: linked
+  const file = w.items.get(a.pin.id);
+  assert.equal(file.sharing, undefined); // folder is link-shared, so the file is not shared on its own
+
+  w.plan[1][9] = ''; // someone clears the cell
+  w.post({ action: 'upload', token: w.token, board, image });
+  assert.equal(w.plan[1][9], ''); // not asked: sheet left alone
+  w.post({ action: 'upload', token: w.token, board, image, link: true });
+  assert.equal(w.plan[1][9], a.folderUrl); // asked: filled again
+});
+
+test('a file is shared on its own when its folder could not be shared', () => {
+  const w = world();
+  w.setToken();
+  const week = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  const image = 'data:image/jpeg;base64,' + Buffer.from('fake-jpeg').toString('base64');
+  const a = w.post({ action: 'upload', token: w.token, board: week.rows[0].board, image });
+  const folder = w.items.get(a.pin.id).parent;
+  folder.sharing = null; // as if domain policy blocked folder sharing
+  const b = w.post({ action: 'upload', token: w.token, board: week.rows[0].board, image });
+  assert.deepEqual(w.items.get(b.pin.id).sharing, ['anyone', 'view']);
+});

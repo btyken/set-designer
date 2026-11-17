@@ -241,13 +241,21 @@ function sdUpload_(body) {
   const key = String(body.board || '');
   if (key !== SD.GENERAL && !/^\d{4}-\d{2}-\d{2}\|/.test(key)) throw new Error('Unknown shoot.');
 
-  const lock = LockService.getDocumentLock();
-  lock.waitLock(20000);
-  let folder;
-  try {
-    folder = sdFindBoard_(key) || sdCreateBoard_(key, body.title);
-  } finally {
-    lock.releaseLock();
+  // Only finding or creating the folder needs the lock; several photos can then upload at once.
+  let folder = sdFindBoard_(key);
+  let created = false;
+  if (!folder) {
+    const lock = LockService.getDocumentLock();
+    lock.waitLock(20000);
+    try {
+      folder = sdFindBoard_(key);
+      if (!folder) {
+        folder = sdCreateBoard_(key, body.title);
+        created = true;
+      }
+    } finally {
+      lock.releaseLock();
+    }
   }
   const ext = m[1] === 'image/png' ? 'png' : m[1] === 'image/webp' ? 'webp' : 'jpg';
   const base = String(body.name || 'peg').replace(/[^\w .-]+/g, '').slice(0, 60) || 'peg';
@@ -255,10 +263,23 @@ function sdUpload_(body) {
   const note = String(body.note || '').slice(0, 400);
   const by = String(body.by || '').slice(0, 40);
   file.setDescription(JSON.stringify({ note: note, by: by }));
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) { /* domain policy: the app falls back to sdImage_ */ }
+  // Files inherit the folder's link sharing. Share the file itself only if the folder could not be shared.
+  if (!sdIsLinkShared_(folder)) {
+    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (err) { /* domain policy: the app falls back to sdImage_ */ }
+  }
 
-  if (key !== SD.GENERAL) sdLinkBoardInSheet_(key, folder.getUrl());
+  // Filling empty Moodboard links reads the whole SHOOT PLAN, so it runs only for a new folder
+  // or when the app says some row on this board is still empty.
+  if (key !== SD.GENERAL && (created || body.link === true)) sdLinkBoardInSheet_(key, folder.getUrl());
   return { pin: sdPin_(file), folderUrl: folder.getUrl() };
+}
+
+function sdIsLinkShared_(folder) {
+  try {
+    return folder.getSharingAccess() === DriveApp.Access.ANYONE_WITH_LINK;
+  } catch (err) {
+    return false;
+  }
 }
 
 function sdRemove_(body) {

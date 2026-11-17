@@ -479,8 +479,11 @@ function renderBoard(data) {
   ].filter(Boolean));
 }
 
-/** A photo as a JPEG data URL, no larger than `max` pixels on its long side. */
-async function toJpeg(src, max = 1600) {
+/**
+ * A photo as a JPEG data URL, no larger than `max` pixels on its long side.
+ * 1280 px is sharp on a phone and on the board (pins show at 700 px) and keeps each upload ~200–300 KB.
+ */
+async function toJpeg(src, max = 1280) {
   const blob = src instanceof Blob ? src : await (await fetch(src)).blob();
   const img = await createImageBitmap(blob, { imageOrientation: 'from-image' });
   const k = Math.min(1, max / Math.max(img.width, img.height));
@@ -488,7 +491,20 @@ async function toJpeg(src, max = 1600) {
   c.width = Math.round(img.width * k);
   c.height = Math.round(img.height * k);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.82);
+  img.close?.();
+  return c.toDataURL('image/jpeg', 0.8);
+}
+
+/** Photos sent to the tracker at the same time. Each upload waits mostly on Google, not on the phone. */
+const UPLOADS_AT_ONCE = 3;
+
+/** True when some tracker row on this board still has an empty Moodboard / Reference Link. */
+function boardNeedsLink(key) {
+  if (key === GENERAL) return false;
+  for (const data of S.cache.values()) {
+    for (const r of [...(data.rows || []), ...(data.openRows || [])]) if (r.board === key && !r.moodLink) return true;
+  }
+  return false;
 }
 
 /**
@@ -505,6 +521,7 @@ function addPegs(t, files, presetNote = '', choices = null) {
   const name = h('input', { type: 'text', value: tracker.name, placeholder: 'e.g. Maye' });
   const msg = h('p', { class: 'help', role: 'status' });
   const go = h('button', { class: 'btn primary', type: 'submit' }, `Add ${plural(files.length, 'photo')}`);
+  const pending = new Set(files); // photos not uploaded yet; a retry sends only these
   const form = h('form', { class: 'report' },
     h('h2', {}, 'Add to moodboard'),
     board ? h('label', {}, 'Board', board) : where,
@@ -518,37 +535,64 @@ function addPegs(t, files, presetNote = '', choices = null) {
     go.disabled = true;
     if (board) board.disabled = true;
     tracker.setName(name.value.trim());
+    msg.className = 'help';
     let done = 0;
-    try {
-      for (const f of files) {
-        msg.textContent = `Uploading ${done + 1} of ${files.length}…`;
-        const out = await call('upload', {
-          board: target.key,
-          title: target.title,
-          name: (typeof f === 'string' ? 'set-design' : f.name.replace(/\.[^.]+$/, '')) || 'peg',
-          note: note.value.trim(),
-          by: name.value.trim(),
-          image: await toJpeg(f),
-        });
-        done += 1;
-        for (const data of S.cache.values()) {
-          const b = data.boards?.[target.key];
-          if (!b) continue;
-          b.pins.push(out.pin);
-          b.folderUrl = out.folderUrl;
-          if (target.key === GENERAL) continue;
-          for (const r of [...data.rows, ...(data.openRows || [])]) if (r.board === target.key && !r.moodLink) r.moodLink = out.folderUrl;
-        }
+    const total = pending.size;
+    const failed = [];
+    const progress = () => { msg.textContent = `Uploading… ${done} of ${total} done`; };
+    progress();
+
+    const send = async (f, first) => {
+      const out = await call('upload', {
+        board: target.key,
+        title: target.title,
+        name: (typeof f === 'string' ? 'set-design' : f.name.replace(/\.[^.]+$/, '')) || 'peg',
+        note: note.value.trim(),
+        by: name.value.trim(),
+        // Only one upload per batch asks the tracker to fill empty Moodboard links, and only when some are empty.
+        link: first && boardNeedsLink(target.key),
+        image: await toJpeg(f),
+      });
+      done += 1;
+      progress();
+      for (const data of S.cache.values()) {
+        const b = data.boards?.[target.key];
+        if (!b) continue;
+        b.pins.push(out.pin);
+        b.folderUrl = out.folderUrl;
+        if (target.key === GENERAL) continue;
+        for (const r of [...data.rows, ...(data.openRows || [])]) if (r.board === target.key && !r.moodLink) r.moodLink = out.folderUrl;
       }
+    };
+
+    const queue = [...pending];
+    const run = async (f, first) => {
+      try {
+        await send(f, first);
+      } catch (err) {
+        if (err.auth) { failed.push(err); return; }
+        try { await send(f, first); } catch (err2) { failed.push(err2); return; } // one retry: Google is sometimes briefly busy
+      }
+      pending.delete(f);
+    };
+    const lead = queue[0];
+    const worker = async () => { for (let f = queue.shift(); f; f = queue.shift()) await run(f, f === lead); };
+    // On a board with no Drive folder yet, the first photo goes alone so the folder exists before the rest arrive.
+    const hasFolder = [...S.cache.values()].some((d) => d.boards?.[target.key]?.folderUrl);
+    if (queue.length && !hasFolder) await run(queue.shift(), true);
+    await Promise.all(Array.from({ length: Math.min(UPLOADS_AT_ONCE, queue.length) }, worker));
+
+    if (!failed.length) {
       close();
       S.message = { text: `Added ${plural(done, 'photo')} to the ${target.label} board.` };
       render();
-    } catch (err) {
-      msg.textContent = `${done ? `${done} added, then: ` : ''}${err.message}`;
-      msg.className = 'error';
-      go.disabled = false;
-      if (done) render();
+      return;
     }
+    msg.textContent = `${done ? `${plural(done, 'photo')} added. ` : ''}${plural(failed.length, 'photo')} did not upload: ${failed[0].message}`;
+    msg.className = 'error';
+    go.textContent = `Try the ${plural(pending.size, 'photo')} again`;
+    go.disabled = false;
+    if (done) render();
   });
   const close = openSheet('Add to moodboard', form);
 }
