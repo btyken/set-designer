@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds the static site and publishes it to the gh-pages branch.
-# Usage: SD_PASSCODE='team passcode' npm run deploy
+# Usage: SD_PASSCODE='team passcode' SD_TRACKER_URL='https://script.google.com/macros/s/.../exec' npm run deploy
 set -e
 cd "$(dirname "$0")/.."
 if [ -z "$SD_PASSCODE" ]; then

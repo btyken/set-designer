@@ -27,6 +27,7 @@
         <button data-step="items" aria-current="true"><span>1</span>Items</button>
         <button data-step="brief"><span>2</span>Brief</button>
         <button data-step="designs"><span>3</span>Designs</button>
+        <button data-step="shoots" class="nav-shoots"><span aria-hidden="true"><svg viewBox="0 0 12 12"><rect x="1.5" y="2.5" width="9" height="8" rx="1" fill="none" stroke="currentColor"/><path d="M1.5 5h9M4 1v3M8 1v3" stroke="currentColor"/></svg></span>Shoots</button>
       </nav>
       <span id="brain" class="tag">…</span>
     </div>
@@ -171,6 +172,28 @@
         </div>
       </div>
     </section>
+    <section id="step-shoots" hidden>
+      <div class="design-head">
+        <div>
+          <p class="kicker">B-roll tracker · <span id="wkLabel"></span></p>
+          <h1 id="wkTitle">This week's shoots.</h1>
+        </div>
+        <div class="wk-nav">
+          <div class="seg" role="group" aria-label="Week">
+            <button id="wkPrev" aria-label="Previous week">‹</button>
+            <button id="wkNow">This week</button>
+            <button id="wkNext" aria-label="Next week">›</button>
+          </div>
+          <button id="wkRefresh" class="btn small">Refresh</button>
+          <a id="wkSheet" class="btn small" target="_blank" rel="noopener" hidden>Open tracker</a>
+        </div>
+      </div>
+      <div id="shootConnect" hidden></div>
+      <p id="shootMsg" class="shoot-msg" role="status"></p>
+      <div id="shootTargets" class="targets"></div>
+      <p id="shootUnassigned" class="note" hidden></p>
+      <div id="shootList" class="shoot-list"></div>
+    </section>
   </main>
 
   <footer id="bar" class="bar">
@@ -221,7 +244,7 @@
   </div>
 
   <div id="lightbox" class="lightbox" hidden>
-    <div class="lightbox-bar"><strong id="lbTitle"></strong><span class="grow"></span><button id="lbShare" class="btn small" hidden>Share</button><a id="lbSave" class="btn small" download>Save</a><button id="lbClose" class="btn small">Close</button></div>
+    <div class="lightbox-bar"><strong id="lbTitle"></strong><span class="grow"></span><button id="lbDel" class="btn small" hidden>Remove</button><button id="lbPin" class="btn small" hidden>Pin to a shoot</button><button id="lbShare" class="btn small" hidden>Share</button><a id="lbSave" class="btn small" download>Save</a><button id="lbClose" class="btn small">Close</button></div>
     <img id="lbImg" alt="">
   </div>
 

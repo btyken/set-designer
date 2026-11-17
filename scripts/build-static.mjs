@@ -1,6 +1,6 @@
 // Builds a static copy of the app (built-in rules only) into dist/ for static hosting.
 // Usage: node scripts/build-static.mjs            (no passcode)
-//        SD_PASSCODE='...' node scripts/build-static.mjs
+//        SD_PASSCODE='...' SD_TRACKER_URL='https://script.google.com/macros/s/.../exec' node scripts/build-static.mjs
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +24,9 @@ for (const rel of [
 }
 const pass = (process.env.SD_PASSCODE || '').trim();
 const config = pass ? { passHash: createHash('sha256').update(pass).digest('hex') } : {};
+// The B-roll tracker web app (see apps-script/). Without it, each person pastes the link once in Shoots.
+const trackerUrl = (process.env.SD_TRACKER_URL || '').trim();
+if (trackerUrl) config.trackerUrl = trackerUrl;
 fs.writeFileSync(path.join(dist, 'config.js'), `window.SD_CONFIG = ${JSON.stringify(config)};\n`);
 fs.writeFileSync(path.join(dist, '.nojekyll'), '');
-console.log(`Built ${dist}${pass ? ' with a passcode gate' : ' with no passcode'}`);
+console.log(`Built ${dist}${pass ? ' with a passcode gate' : ' with no passcode'}${trackerUrl ? ', linked to the B-roll tracker' : ', no tracker link'}`);

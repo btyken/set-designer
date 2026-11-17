@@ -2,8 +2,10 @@ import { openMeasure, cutoutFromUrl } from './measure.js';
 import { SetScene } from './scene.js';
 import { localDesigns, FURNITURE } from './rules.js';
 import { CATEGORIES, MATERIALS, STATUSES, statusOf, statusName, usable, suggestUses, findDuplicates, matchesFilter } from './props.js';
+import { $, h } from './dom.js';
+import { initShoots, showShoots, pinImage, canPin } from './shoots.js';
+import { tracker, tokenFor } from './tracker.js';
 
-const $ = (id) => document.getElementById(id);
 const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
 const FRAMES = ['16:9', '4:5', '1:1', '9:16'];
 const PRODUCT_CATS = ['Cleanser', 'Sunscreen', 'Serum', 'Moisturiser', 'Mask', 'Makeup', 'Bundle', 'Other'];
@@ -37,20 +39,6 @@ const DEFAULT_BRIEF = {
   mood: MOODS[0].name, brand: [], text: '', surfaces: '',
 };
 
-/** Tiny element builder. Text always goes in as text nodes, never as HTML. */
-function h(tag, attrs = {}, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') el.className = v;
-    else if (k === 'style') el.style.cssText = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k in el && k !== 'list') el[k] = v;
-    else el.setAttribute(k, v);
-  }
-  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
-  return el;
-}
 function svg(inner) {
   const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   el.setAttribute('viewBox', '0 0 56 36');
@@ -192,6 +180,8 @@ function passGate() {
       e.preventDefault();
       if ((await sha256($('gateInput').value.trim())) === want) {
         try { localStorage.setItem('sd-pass', want); } catch { /* not remembered */ }
+        // The same passcode unlocks the tracker, so nobody has to type it twice.
+        if (!tracker.token) tracker.setToken(await tokenFor($('gateInput').value));
         $('gate').hidden = true;
         resolve();
       } else {
@@ -206,22 +196,26 @@ function passGate() {
 
 function goto(step) {
   state.step = step;
-  for (const s of ['items', 'brief', 'designs']) $(`step-${s}`).hidden = s !== step;
+  for (const s of ['items', 'brief', 'designs', 'shoots']) $(`step-${s}`).hidden = s !== step;
   for (const b of document.querySelectorAll('.steps button')) {
     b.setAttribute('aria-current', String(b.dataset.step === step));
     const done = (b.dataset.step === 'items' && state.items.length + state.products.length > 0) || (b.dataset.step === 'designs' && state.designs.length > 0);
     b.classList.toggle('done', done && b.dataset.step !== step);
   }
+  // The Shoots screen has its own address so the team can bookmark it.
+  const hash = step === 'shoots' ? '#shoots' : '';
+  if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
   renderBar();
   window.scrollTo(0, 0);
   if (step === 'designs') renderDesigns();
+  if (step === 'shoots') showShoots();
 }
 
 function renderBar() {
   const text = $('barText');
   const next = $('barNext');
   const back = $('barBack');
-  $('bar').hidden = state.step === 'designs';
+  $('bar').hidden = state.step === 'designs' || state.step === 'shoots';
   text.className = state.message?.error ? 'error' : '';
   const n = state.items.filter(usable).length;
   const off = state.items.length - n;
@@ -697,7 +691,11 @@ const where = (o) => {
   return [part(o.x_cm, 'left', 'right'), part(o.z_cm, 'back', 'forward')].filter(Boolean).join(' · ') || 'centre of the set';
 };
 
-function openLightbox(shot, name) {
+function openLightbox(shot, name, opts = {}) {
+  $('lbPin').hidden = !(opts.pin !== false && canPin());
+  $('lbPin').onclick = () => { $('lightbox').hidden = true; pinImage(shot.url, opts.pinNote || shot.name); };
+  $('lbDel').hidden = !opts.onDelete;
+  $('lbDel').onclick = async () => { if (await opts.onDelete()) $('lightbox').hidden = true; };
   $('lbTitle').textContent = shot.name;
   $('lbImg').src = shot.url;
   $('lbImg').alt = `${shot.name} mockup`;
@@ -740,7 +738,7 @@ async function renderDesigns() {
   const shots = scene.renderShots();
   const slug = `set-option-${index + 1}`;
   $('mockups').replaceChildren(...shots.map((shot) => h('figure', {},
-    h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => openLightbox(shot, slug) },
+    h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => openLightbox(shot, slug, { pinNote: `Set design: ${d.name}, ${shot.name}${shot.cam ? `. ${shot.cam}` : ''}` }) },
       h('img', { src: shot.url, alt: `${shot.name} mockup`, width: shot.w, height: shot.h })),
     h('figcaption', {}, h('strong', {}, shot.name), h('span', {}, shot.note), shot.cam && h('span', { class: 'cam' }, shot.cam)),
   )));
@@ -872,7 +870,8 @@ async function boot() {
 
   renderItems();
   renderBrief();
-  goto('items');
+  initShoots({ openLightbox });
+  goto(location.hash === '#shoots' ? 'shoots' : 'items');
   backfillCutouts();
 }
 
