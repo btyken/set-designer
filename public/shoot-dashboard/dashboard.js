@@ -255,7 +255,7 @@ function shootCard(s, data, carried = false) {
       h('div', {},
         h('p', { class: 'kicker' }, [dayLabel(s.date), s.timeBlock].filter(Boolean).join(' · ')),
         h('h2', { class: 'shoot-title' }, s.product || 'Untitled shoot'),
-        h('div', { class: 'chips' },
+        h('div', { class: 'shoot-chips' },
           carried && h('span', { class: 'chip bad' }, 'Carried over'),
           uniq('contentType').map((c) => h('span', { class: 'chip' }, c)),
           uniq('approval').map((a) => h('span', { class: 'chip' + (a === 'Approved' ? ' ok' : a === 'Rejected' ? ' bad' : '') }, `Pre-shoot: ${a}`)),

@@ -160,6 +160,7 @@ function goto(step) {
   }
   renderBar();
   window.scrollTo(0, 0);
+  if (step === 'brief') renderBrief(); // names and sizes may have changed on the Items step
   if (step === 'designs') renderDesigns();
 }
 
