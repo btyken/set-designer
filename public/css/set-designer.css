@@ -216,3 +216,22 @@ h2.sub { margin: 28px 0 12px; padding-top: 18px; border-top: 1px solid var(--rul
   #barNext { flex: 1; font-size: 17px; }
 
 }
+
+/* Copy for ChatGPT */
+.head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gpt-sheet .sheet-in { width: min(640px, 100%); }
+.gpt-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+.gpt-steps strong { color: var(--ink); font-weight: 500; }
+.gpt-frames { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; height: 98px; flex: none; }
+.gpt-frames button { flex: none; width: 112px; padding: 0; border: 1px solid var(--rule-strong); border-radius: var(--r-sm); background: var(--raised); overflow: hidden; cursor: pointer; display: grid; text-align: left; height: 92px; align-content: start; }
+.gpt-frames button[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+.gpt-frames img { width: 100%; height: 64px; object-fit: cover; display: block; }
+.gpt-frames span { font-size: 12px; padding: 4px 6px; color: var(--ink); }
+.gpt-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.gpt-photos figure { margin: 0; display: grid; gap: 4px; }
+.gpt-photos img, .gpt-photos .gpt-add { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--deep); border-radius: var(--r-sm); display: block; }
+.gpt-photos figcaption { font-size: 11px; line-height: 1.3; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gpt-add { border: 1px dashed var(--rule-strong); cursor: pointer; display: grid !important; place-items: center; font-size: 12px; color: var(--muted); text-align: center; padding: 6px; }
+.gpt-sheet textarea { width: 100%; min-height: 180px; font: 13px/1.45 var(--mono); resize: vertical; }
+.gpt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gpt-actions .btn { flex: 1 1 160px; }

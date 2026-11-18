@@ -6,6 +6,7 @@ import { localDesigns, FURNITURE } from './rules.js';
 import { CATEGORIES, MATERIALS, STATUSES, statusOf, statusName, usable, suggestUses, findDuplicates, matchesFilter } from './props.js';
 import { $, h } from '../shared/dom.js';
 import { onPhone, shareImage } from '../shared/lightbox.js';
+import { chatgptPhotos, chatgptPrompt, photoFileName } from './chatgpt.js';
 
 const SHAPES = ['cylinder', 'box', 'sphere', 'cone', 'flat'];
 const FRAMES = ['16:9', '4:5', '1:1', '9:16'];
@@ -99,6 +100,8 @@ const state = {
 const openEditors = new Set();
 let howTouched = false;
 let scene;
+/** Sample frames of the design on screen, for Copy for ChatGPT. */
+let shown = { index: -1, shots: [] };
 const saveItems = () => save('items', state.items);
 const saveProducts = () => save('products', state.products);
 const featuredIds = (brief = state.brief) => brief.products || (brief.product ? [brief.product] : []);
@@ -673,6 +676,7 @@ async function renderDesigns() {
   const ready = await scene.setDesign(d, designThings(brief, true), brief);
   if (!ready || index !== state.active) return;
   const shots = scene.renderShots();
+  shown = { index, shots };
   const slug = `set-option-${index + 1}`;
   $('mockups').replaceChildren(...shots.map((shot) => h('figure', {},
     h('button', { class: 'shot', 'aria-label': `Open ${shot.name} mockup`, onclick: () => tool.openLightbox({ ...shot, alt: `${shot.name} mockup` }, slug, { onPin: tool.pinToShoot(shot.url, `Set design: ${d.name}, ${shot.name}${shot.cam ? `. ${shot.cam}` : ''}`) }) },
@@ -725,6 +729,147 @@ function renderDetails(d, brief) {
   ].filter(Boolean));
 }
 
+// ---------- Copy for ChatGPT ----------
+
+/** Copies text, falling back to a selected textarea where the clipboard API is blocked. */
+async function copyText(text, area) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    if (!area) return false;
+    area.focus();
+    area.select();
+    try { return document.execCommand('copy'); } catch { return false; }
+  }
+}
+
+async function dataUrlToFile(url, name) {
+  const blob = await (await fetch(url)).blob();
+  return new File([blob], name, { type: blob.type || 'image/jpeg' });
+}
+
+/**
+ * Sheet that packs the design on screen for ChatGPT: a prompt to paste and the photos to attach
+ * (a sample frame as the layout, an optional photo of the real room, then the products and props).
+ */
+function openChatGpt() {
+  const d = state.designs[state.active];
+  if (!d) return;
+  if (shown.index !== state.active || !shown.shots.length) {
+    state.message = { text: 'The sample frames are still rendering. Try again in a moment.' };
+    renderBar();
+    return;
+  }
+  const brief = state.designBrief || state.brief;
+  const things = designThings(brief, true);
+  const mood = MOODS.find((m) => m.name === brief.mood);
+  const camera = CAMERAS.find((c) => c.id === brief.camera);
+  const shots = shown.shots;
+  let frame = 0;
+  let background = null; // data URL of the real room, for this pack only
+  let edited = false;
+  let pack;
+
+  const area = h('textarea', { 'aria-label': 'Prompt for ChatGPT', oninput: () => { edited = true; } });
+  const frames = h('div', { class: 'gpt-frames', role: 'group', 'aria-label': 'Layout frame' });
+  const photos = h('div', { class: 'gpt-photos' });
+  const msg = h('p', { class: 'help', role: 'status' });
+  const bgInput = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    background = await fileToDataUrl(f, 1600);
+    build();
+  } });
+
+  const urlOf = (p) => (p.kind === 'layout' ? shots[frame].url : p.kind === 'background' ? background : p.item.thumb);
+  const labelOf = (p) => (p.kind === 'layout' ? `Layout · ${shots[frame].name}` : p.kind === 'background' ? 'Your room' : p.item.name);
+
+  function build() {
+    const { photos: list, dropped } = chatgptPhotos(d, things, { background: Boolean(background) });
+    pack = list;
+    if (!edited) area.value = chatgptPrompt({ design: d, brief, things, photos: list, dropped, mood, camera, frameName: shots[frame].name });
+    frames.replaceChildren(...shots.map((s, i) => h('button', {
+      type: 'button', 'aria-pressed': String(i === frame),
+      onclick: () => { frame = i; build(); },
+    }, h('img', { src: s.url, alt: '' }), h('span', {}, s.name))));
+    photos.replaceChildren(
+      ...list.map((p, i) => h('figure', {},
+        h('img', { src: urlOf(p), alt: labelOf(p) }),
+        h('figcaption', { title: labelOf(p) }, `${i + 1}. ${labelOf(p)}`))),
+      h('figure', {},
+        h('button', { type: 'button', class: 'gpt-add', onclick: () => (background ? (background = null, build()) : bgInput.click()) },
+          background ? 'Remove room photo' : '+ Photo of the real room (optional)'),
+        h('figcaption', {}, background ? 'Room photo added' : 'Background')),
+    );
+    msg.textContent = dropped.length ? `ChatGPT takes up to ${list.length} photos at once, so ${dropped.map((t) => t.name).join(', ')} ${dropped.length === 1 ? 'is' : 'are'} described in words only.` : '';
+  }
+
+  async function files() {
+    return Promise.all(pack.map((p, i) => dataUrlToFile(urlOf(p), photoFileName(p, i))));
+  }
+  async function copyPrompt() {
+    const ok = await copyText(area.value, area);
+    msg.textContent = ok ? 'Prompt copied. Paste it in ChatGPT after attaching the photos.' : 'Could not copy. Select the prompt and copy it by hand.';
+    return ok;
+  }
+  async function savePhotos() {
+    const list = await files();
+    for (const f of list) {
+      const url = URL.createObjectURL(f);
+      h('a', { href: url, download: f.name }).click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      await new Promise((r) => setTimeout(r, 250)); // browsers drop downloads fired all at once
+    }
+    msg.textContent = `Saved ${list.length} photos, numbered in the order the prompt uses them.`;
+  }
+  async function send() {
+    await copyText(area.value, area);
+    const list = await files();
+    if (!navigator.canShare?.({ files: list })) return savePhotos();
+    try {
+      await navigator.share({ files: list, text: area.value, title: `Set design: ${d.name}` });
+      msg.textContent = 'Sent. If the prompt did not come through, it is copied: paste it in the ChatGPT message.';
+    } catch (err) {
+      if (err?.name !== 'AbortError') msg.textContent = `Could not open the share sheet (${err.message}). Use Save photos instead.`;
+    }
+  }
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  document.addEventListener('keydown', onKey);
+  const phone = onPhone() && Boolean(navigator.canShare);
+  const box = h('div', { class: 'sheet gpt-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Copy for ChatGPT', onclick: (e) => { if (e.target === box) close(); } },
+    h('div', { class: 'sheet-in' },
+      h('h2', {}, 'Realistic preview in ChatGPT'),
+      h('ol', { class: 'gpt-steps' },
+        phone
+          ? [h('li', {}, h('strong', {}, 'Send to ChatGPT'), ' below and pick the ChatGPT app.'), h('li', {}, 'If the text did not come along, paste it: it is already copied.')]
+          : [h('li', {}, h('strong', {}, 'Save photos'), ' and ', h('strong', {}, 'Copy prompt'), '.'), h('li', {}, 'In ChatGPT, attach all the photos, paste the prompt and send.')],
+        h('li', {}, 'Ask for changes in the same chat, e.g. "warmer light" or "move the serum to the left".'),
+      ),
+      h('strong', {}, 'Layout frame'),
+      frames,
+      h('strong', {}, 'Photos to attach'),
+      photos,
+      bgInput,
+      h('strong', {}, 'Prompt'),
+      area,
+      msg,
+      h('div', { class: 'gpt-actions' },
+        phone && h('button', { type: 'button', class: 'btn primary', onclick: send }, 'Send to ChatGPT'),
+        h('button', { type: 'button', class: phone ? 'btn' : 'btn primary', onclick: copyPrompt }, 'Copy prompt'),
+        h('button', { type: 'button', class: 'btn', onclick: savePhotos }, 'Save photos'),
+        h('a', { class: 'btn', href: 'https://chatgpt.com/', target: '_blank', rel: 'noopener' }, 'Open ChatGPT'),
+        h('button', { type: 'button', class: 'btn', onclick: close }, 'Close'),
+      ),
+      h('p', { class: 'help' }, 'ChatGPT can change small details like label text. Use the picture as a look for the set, not as a product photo.'),
+    ));
+  build();
+  document.body.append(box);
+}
+
 // ---------- Start ----------
 
 /** Hooks from main.js: the shared picture viewer, and pinning a frame to a shoot (null when not connected). */
@@ -754,6 +899,7 @@ export async function initSetDesigner(hooks = {}) {
   $('sampleBtn').addEventListener('click', loadSamples);
   for (const b of $('libTabs').children) b.addEventListener('click', () => { state.tab = b.dataset.tab; openEditors.clear(); renderItems(); });
   $('regenBtn').addEventListener('click', generate);
+  $('gptBtn').addEventListener('click', openChatGpt);
   $('pCat').append(...CATEGORIES.map((c) => h('option', { value: c }, c)));
   $('pStatus').append(...STATUSES.map((s) => h('option', { value: s.id }, s.name)));
   $('pSearch').addEventListener('input', (e) => { state.filter.q = e.target.value; renderItems(); });
