@@ -42,6 +42,8 @@ const SD = {
     'Member Shoot Task': 'task',
     'Video Stream': 'stream',
   },
+  // Columns the page uses but can live without. A missing one is reported, not fatal.
+  EXPECTED: ['planned', 'captured', 'qcPassed', 'status', 'moodLink', 'stream', 'rawFolder', 'shootId', 'logged'],
   STATUSES: ['Planned', 'Ready to Shoot', 'Shooting', 'QC', 'Completed', 'Paused'],
   STREAMS: ['Internal - Massive', 'Internal - CBQ', 'External'],
   MAX_UPLOAD_BYTES: 8 * 1024 * 1024,
@@ -158,6 +160,7 @@ function sdWeek_(body) {
     weekStart: startKey,
     weekEnd: endKey,
     sheetUrl: ss.getUrl() + '#gid=' + plan.sheet.getSheetId(),
+    missing: plan.missing,
     targets: sdTargets_(),
     rows: rows,
     openRows: openRows,
@@ -186,6 +189,8 @@ function sdReport_(body) {
     if (body.status && SD.STATUSES.indexOf(body.status) < 0) throw new Error('Unknown shoot status.');
 
     const sh = plan.sheet;
+    if (!plan.cols.captured) throw new Error('SHOOT PLAN has no Captured Clips column to save to.');
+    if (body.status && !plan.cols.status) throw new Error('SHOOT PLAN has no Shoot Status column to save to.');
     sh.getRange(rowNum, plan.cols.captured).setValue(captured);
     if (qc !== null && plan.cols.qcPassed) sh.getRange(rowNum, plan.cols.qcPassed).setValue(qc);
     if (body.status) sh.getRange(rowNum, plan.cols.status).setValue(body.status);
@@ -308,14 +313,23 @@ function sdPlan_() {
     const field = SD.HEADERS[String(t).trim()];
     if (field) cols[field] = i + 1;
   });
-  // QC Passed Clips and Video Files Logged are optional: the page works without them (the owner
-  // removed QC Passed Clips once, on 24 Nov 2026, and every shoot stopped loading).
-  ['date', 'product', 'planned', 'captured', 'status', 'moodLink', 'member'].forEach((f) => {
-    if (!cols[f]) throw new Error('SHOOT PLAN is missing a column the app needs (' + f + ').');
+  // Only the columns that say what a shoot is are required. The tracker's owner changes its columns
+  // (QC Passed Clips was removed once, on 24 Nov 2026, and every shoot stopped loading), so the rest
+  // are optional: the week still loads, the page says which ones are missing, and only the action
+  // that needs a missing column is refused.
+  ['date', 'product', 'member'].forEach((f) => {
+    if (!cols[f]) throw new Error('SHOOT PLAN has no "' + sdHeaderOf_(f) + '" column. The app cannot tell the shoots apart without it.');
   });
+  const missing = SD.EXPECTED.filter((f) => !cols[f]).map(sdHeaderOf_);
   const last = sh.getLastRow();
   const values = last >= 2 ? sh.getRange(2, 1, last - 1, lastCol).getValues() : [];
-  return { sheet: sh, cols: cols, values: values };
+  return { sheet: sh, cols: cols, values: values, missing: missing };
+}
+
+/** The SHOOT PLAN header text for a field name. */
+function sdHeaderOf_(field) {
+  const names = Object.keys(SD.HEADERS).filter((h) => SD.HEADERS[h] === field);
+  return names[0] || field;
 }
 
 function sdRowObject_(cols, vals, tz) {
@@ -353,6 +367,7 @@ function sdLinkBoardInSheet_(key, url) {
   lock.waitLock(20000);
   try {
     const plan = sdPlan_();
+    if (!plan.cols.moodLink) return; // no Moodboard / Reference Link column: the pegs still save in Drive
     const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
     plan.values.forEach((vals, i) => {
       const r = sdRowObject_(plan.cols, vals, tz);

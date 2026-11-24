@@ -186,6 +186,7 @@ test('a file is shared on its own when its folder could not be shared', () => {
 test('the week still loads when QC Passed Clips is missing, and carries the file count', () => {
   const w = world({ rows: [planRow(day(2026, 11, 18), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Captured Clips': 70, 'Video Files Logged (Auto)': 76 })] });
   w.setToken();
+  w.plan[0] = [...w.plan[0]]; // the header row is shared between test worlds
   const qcCol = w.plan[0].indexOf('QC Passed Clips');
   w.plan[0][qcCol] = 'Something else';
   const out = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
@@ -195,4 +196,27 @@ test('the week still loads when QC Passed Clips is missing, and carries the file
   const saved = w.post({ action: 'report', token: w.token, row: 2, expect: { date: '2026-11-18', product: '4EVER GLOW SET', member: 'Maye' }, captured: 76, qcPassed: 9 });
   assert.equal(saved.ok, true, saved.error);
   assert.equal(w.plan[1][7], 76);
+});
+
+test('missing optional columns are reported, not fatal; only shoot-defining ones stop the page', () => {
+  const w = world({ rows: [planRow(day(2026, 11, 18), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Captured Clips': 70, 'Shoot Status': 'QC' })] });
+  w.setToken();
+  w.plan[0] = [...w.plan[0]]; // the header row is shared between test worlds
+  for (const name of ['Captured Clips', 'Shoot Status', 'Moodboard / Reference Link', 'Video Stream']) w.plan[0][w.plan[0].indexOf(name)] = `${name} (old)`;
+  const out = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  assert.equal(out.ok, true, out.error);
+  assert.equal(out.rows.length, 1);
+  assert.deepEqual(out.missing, ['Captured Clips', 'Shoot Status', 'Moodboard / Reference Link', 'Video Stream']);
+  const expect = { date: '2026-11-18', product: '4EVER GLOW SET', member: 'Maye' };
+  assert.match(w.post({ action: 'report', token: w.token, row: 2, expect, captured: 5 }).error, /no Captured Clips column/);
+  assert.match(w.post({ action: 'stream', token: w.token, row: 2, expect, stream: 'External' }).error, /no Video Stream column/);
+  // a column that says what a shoot is: the page cannot work without it, and says which one
+  w.plan[0][w.plan[0].indexOf('Assigned Member')] = 'Who';
+  assert.match(w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' }).error, /no "Assigned Member" column/);
+});
+
+test('a complete tracker reports nothing missing', () => {
+  const w = world();
+  w.setToken();
+  assert.deepEqual(w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' }).missing, []);
 });

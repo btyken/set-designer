@@ -180,6 +180,12 @@ function render() {
   }
   if (S.view === 'qc') return;
   if (S.view === 'board') return renderBoard(data);
+  // The tracker's columns change now and then. A missing one is named here; the rest of the page still works.
+  const missing = data.missing || [];
+  $('shootMissing').hidden = missing.length === 0;
+  $('shootMissing').textContent = missing.length
+    ? `The tracker's SHOOT PLAN tab has no ${missing.map((m) => `“${m}”`).join(', ')} column${missing.length > 1 ? 's' : ''}. Those figures show as blank until ${missing.length > 1 ? 'they are' : 'it is'} added back.`
+    : '';
   renderTargets(data);
   renderQuotas(data);
   renderList(data);
