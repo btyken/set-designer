@@ -9,11 +9,12 @@ import { initDashboard, showDashboard, pinImage, canPin } from './shoot-dashboar
 import { tracker, tokenFor } from './shoot-dashboard/tracker.js';
 
 // The BTY mark links to the BTY Tools home only on bty-tools.web.app (or its local emulator on :5030). On this tool's
-// own address (GitHub Pages) "/" would leave the site, so there it just reopens this page.
+// own address (GitHub Pages) "/" would leave the site, so there it just reopens this page and the back arrow stays hidden.
 const onToolsSite =
   /^bty-tools\.(web\.app|firebaseapp\.com)$/.test(location.hostname) ||
   (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.port === '5030');
-if (!onToolsSite) document.querySelector('a.brand')?.setAttribute('href', './');
+if (onToolsSite) document.querySelector('a.home-back')?.removeAttribute('hidden');
+else document.querySelector('a.brand')?.setAttribute('href', './');
 
 const TOOLS = {
   'set-designer': { hash: '', show: showSetDesigner },

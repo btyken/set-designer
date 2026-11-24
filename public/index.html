@@ -24,7 +24,8 @@
 <body>
   <header class="top">
     <div class="top-in">
-      <a class="brand" href="/" aria-label="BTY Tools home"><b>BTY</b><span>BTY Tools</span><em>B-roll</em></a>
+      <a class="home-back" href="/" aria-label="Back to BTY Tools home" title="BTY Tools home" hidden><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10H4M9 5l-5 5 5 5"/></svg></a>
+      <a class="brand" href="/" aria-label="BTY Tools home"><img src="./brand/logo.webp" alt="BTY Advance" width="36" height="36"><span>BTY Tools</span><em>B-roll</em></a>
       <nav class="seg tool-switch" aria-label="Tools">
         <button data-tool="set-designer" aria-pressed="true">Set Designer</button>
         <button data-tool="shoots" aria-pressed="false">Shoot Dashboard</button>
@@ -265,7 +266,7 @@
 
   <div id="gate" class="gate" hidden>
     <form id="gateForm">
-      <span class="brand"><b>BTY</b>B-roll Production Tools</span>
+      <span class="brand"><img src="./brand/logo.webp" alt="BTY Advance" width="36" height="36">B-roll Production Tools</span>
       <label>Team passcode<input id="gateInput" type="password" autocomplete="current-password" required></label>
       <p id="gateMsg" class="error" role="alert"></p>
       <button class="btn primary">Enter</button>
