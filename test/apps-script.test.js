@@ -1,7 +1,7 @@
 // Runs apps-script/Code.gs against an in-memory copy of the tracker, Drive and script properties.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { world } from './helpers/gas-world.js';
+import { world, planRow, day } from './helpers/gas-world.js';
 
 test('refuses calls until the passcode is set, then checks it', () => {
   const w = world();
@@ -181,4 +181,18 @@ test('a file is shared on its own when its folder could not be shared', () => {
   folder.sharing = null; // as if domain policy blocked folder sharing
   const b = w.post({ action: 'upload', token: w.token, board: week.rows[0].board, image });
   assert.deepEqual(w.items.get(b.pin.id).sharing, ['anyone', 'view']);
+});
+
+test('the week still loads when QC Passed Clips is missing, and carries the file count', () => {
+  const w = world({ rows: [planRow(day(2026, 11, 18), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Captured Clips': 70, 'Video Files Logged (Auto)': 76 })] });
+  w.setToken();
+  const qcCol = w.plan[0].indexOf('QC Passed Clips');
+  w.plan[0][qcCol] = 'Something else';
+  const out = w.post({ action: 'week', token: w.token, weekStart: '2026-11-16' });
+  assert.equal(out.ok, true, out.error);
+  assert.equal(out.rows[0].logged, 76);
+  assert.equal(out.rows[0].qcPassed, undefined);
+  const saved = w.post({ action: 'report', token: w.token, row: 2, expect: { date: '2026-11-18', product: '4EVER GLOW SET', member: 'Maye' }, captured: 76, qcPassed: 9 });
+  assert.equal(saved.ok, true, saved.error);
+  assert.equal(w.plan[1][7], 76);
 });

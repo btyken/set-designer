@@ -144,6 +144,18 @@ export function groupShoots(rows) {
 }
 
 /** Simple checks on a shot report before it is sent. Returns an error message or ''. */
+/**
+ * Clips captured come from the tracker's own count of video files in the shoot's RAW folder
+ * (Video Files Logged), when it has one. Nobody types a number the tracker already knows.
+ * Rows with no files yet keep whatever was typed in Captured Clips.
+ */
+export function withFileCounts(data) {
+  for (const r of [...(data.rows || []), ...(data.openRows || [])]) {
+    if (Number.isFinite(r.logged) && r.logged > 0) { r.typed = r.captured; r.captured = r.logged; }
+  }
+  return data;
+}
+
 export function checkReport({ captured, qcPassed }) {
   const whole = (v) => v !== '' && v != null && Number.isInteger(Number(v)) && Number(v) >= 0;
   if (!whole(captured)) return 'Enter the number of clips captured (0 or more).';

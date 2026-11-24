@@ -18,7 +18,7 @@ const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now
 const on = (offset) => day(monday.getFullYear(), monday.getMonth() + 1, monday.getDate() + offset);
 const w = world({
   rows: [
-    planRow(on(1), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Captured Clips': 60, 'QC Passed Clips': 52, 'Shoot Status': 'QC', 'Pre-Shoot Approval': 'Approved', 'Set / Lighting / Props / Angles': 'White sweep, stepped blocks, warm rim from back left', 'Member Shoot Task': 'Hero bottle turns + texture swatches' }),
+    planRow(on(1), '4EVER GLOW SET', 'Internal', 75, 'Maye', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Captured Clips': 60, 'Video Files Logged (Auto)': 62, 'QC Passed Clips': 52, 'Shoot Status': 'QC', 'Pre-Shoot Approval': 'Approved', 'Set / Lighting / Props / Angles': 'White sweep, stepped blocks, warm rim from back left', 'Member Shoot Task': 'Hero bottle turns + texture swatches' }),
     planRow(on(1), '4EVER GLOW SET', 'Internal', 45, 'Abe', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - CBQ', 'Captured Clips': 20, 'Shoot Status': 'Shooting', 'Pre-Shoot Approval': 'Approved' }),
     planRow(on(1), '4EVER GLOW SET', 'External', 60, 'Maegan', { 'Content Type': 'Faceless with Model', 'Captured Clips': 38, 'Pre-Shoot Approval': 'Approved', 'Moodboard / Reference Link': 'https://www.pinterest.com/pin/000000/' }),
     planRow(on(3), 'SUNSCREEN SPF50', 'Internal', 40, 'Marie', { 'Content Type': 'Product Shots', 'Video Stream': 'Internal - Massive', 'Pre-Shoot Approval': 'Pending', 'Shoot Status': 'Planned' }),

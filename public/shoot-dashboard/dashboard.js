@@ -4,7 +4,7 @@
 import { $, h, openSheet } from '../shared/dom.js';
 import {
   STREAMS, STATUSES, tracker, tokenFor, call, mondayOf, addDays, weekLabel, dayLabel, streamOf, remaining,
-  weekTotals, shootTotals, groupShoots, memberQuotas, checkReport,
+  weekTotals, shootTotals, groupShoots, memberQuotas, checkReport, withFileCounts,
 } from './tracker.js';
 
 import { renderQc, setTrackerListener } from './qc.js';
@@ -83,7 +83,7 @@ async function load(force) {
   S.message = { text: 'Loading shoots from the tracker…' };
   render();
   try {
-    const data = await call('week', { weekStart: week });
+    const data = withFileCounts(await call('week', { weekStart: week }));
     S.cache.set(week, data);
     if (week === S.week) S.message = null;
   } catch (err) {
@@ -364,8 +364,10 @@ function crewRow(r) {
 // ---------- Report shots ----------
 
 function reportShots(r) {
-  const captured = h('input', { type: 'number', min: 0, step: 1, inputMode: 'numeric', value: r.captured ?? '' });
-  const qc = h('input', { type: 'number', min: 0, step: 1, inputMode: 'numeric', value: r.qcPassed ?? '', placeholder: 'Leave blank if not reviewed yet' });
+  // The tracker counts the video files in the shoot's RAW folder, and Quality check counts the passes,
+  // so neither number is typed here. Captured is only typed while the tracker has no files for the row.
+  const counted = Number.isFinite(r.logged) && r.logged > 0 ? r.logged : null;
+  const captured = h('input', { type: 'number', min: 0, step: 1, inputMode: 'numeric', value: counted ?? r.captured ?? '' });
   const status = h('select', {},
     h('option', { value: '' }, r.status ? `Keep "${r.status}"` : 'Leave blank'),
     STATUSES.filter((s) => s !== r.status).map((s) => h('option', { value: s }, s)));
@@ -383,15 +385,17 @@ function reportShots(r) {
   const form = h('form', { class: 'report' },
     h('h2', {}, `Report shots · ${r.member || 'Unassigned'}`),
     h('p', { class: 'help' }, `${r.product}, ${dayLabel(r.date)}${r.timeBlock ? `, ${r.timeBlock}` : ''}. Saved straight to SHOOT PLAN.`),
-    h('label', {}, 'Clips captured', captured),
+    counted != null
+      ? h('p', { class: 'counted' }, h('strong', {}, String(counted)), ' clips captured, counted from the video files in this shoot’s RAW folder.')
+      : h('label', {}, 'Clips captured', captured, h('span', { class: 'help' }, 'Only until the clips are in the RAW folder. After that the tracker counts them.')),
     live,
-    h('label', {}, 'Clips that passed QC', qc),
+    h('p', { class: 'counted' }, h('strong', {}, r.qcPassed == null ? '–' : String(r.qcPassed)), ' passed QC, counted in Quality check.'),
     h('label', {}, 'Shoot status', status),
     msg,
     h('div', { class: 'sheet-actions' }, h('button', { class: 'btn', type: 'button', onclick: () => close() }, 'Cancel'), save));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const problem = checkReport({ captured: captured.value, qcPassed: qc.value });
+    const problem = checkReport({ captured: captured.value, qcPassed: '' });
     if (problem) { msg.textContent = problem; return; }
     save.disabled = true;
     save.textContent = 'Saving…';
@@ -401,10 +405,11 @@ function reportShots(r) {
         row: r.row,
         expect: { date: r.date, product: r.product, member: r.member },
         captured: Number(captured.value),
-        qcPassed: qc.value === '' ? null : Number(qc.value),
+        qcPassed: null, // written by Quality check, never from here
         status: status.value,
       });
       Object.assign(r, out.row);
+      withFileCounts({ rows: [r] });
       close();
       S.message = { text: `Saved: ${r.member} captured ${r.captured} clips.` };
       render();
@@ -415,7 +420,7 @@ function reportShots(r) {
     }
   });
   const close = openSheet('Report shots', form);
-  captured.focus();
+  if (counted == null) captured.focus();
 }
 
 // ---------- Moodboard ----------

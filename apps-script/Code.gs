@@ -37,6 +37,7 @@ const SD = {
     'Shoot Status': 'status',
     'RAW Folder Link': 'rawFolder',
     'Shoot ID (Auto)': 'shootId',
+    'Video Files Logged (Auto)': 'logged',
     'Assigned Member': 'member',
     'Member Shoot Task': 'task',
     'Video Stream': 'stream',
@@ -186,7 +187,7 @@ function sdReport_(body) {
 
     const sh = plan.sheet;
     sh.getRange(rowNum, plan.cols.captured).setValue(captured);
-    if (qc !== null) sh.getRange(rowNum, plan.cols.qcPassed).setValue(qc);
+    if (qc !== null && plan.cols.qcPassed) sh.getRange(rowNum, plan.cols.qcPassed).setValue(qc);
     if (body.status) sh.getRange(rowNum, plan.cols.status).setValue(body.status);
     SpreadsheetApp.flush();
     const after = sh.getRange(rowNum, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -307,7 +308,9 @@ function sdPlan_() {
     const field = SD.HEADERS[String(t).trim()];
     if (field) cols[field] = i + 1;
   });
-  ['date', 'product', 'planned', 'captured', 'qcPassed', 'status', 'moodLink', 'member'].forEach((f) => {
+  // QC Passed Clips and Video Files Logged are optional: the page works without them (the owner
+  // removed QC Passed Clips once, on 24 Nov 2026, and every shoot stopped loading).
+  ['date', 'product', 'planned', 'captured', 'status', 'moodLink', 'member'].forEach((f) => {
     if (!cols[f]) throw new Error('SHOOT PLAN is missing a column the app needs (' + f + ').');
   });
   const last = sh.getLastRow();
@@ -320,7 +323,7 @@ function sdRowObject_(cols, vals, tz) {
   Object.keys(cols).forEach((f) => {
     let v = vals[cols[f] - 1];
     if (f === 'date') v = Object.prototype.toString.call(v) === '[object Date]' ? sdDay_(v, tz) : sdNormaliseDayText_(v);
-    else if (['planned', 'captured', 'qcPassed'].indexOf(f) >= 0) v = v === '' || v === null ? null : Number(v);
+    else if (['planned', 'captured', 'qcPassed', 'logged'].indexOf(f) >= 0) v = v === '' || v === null ? null : Number(v);
     else v = v === null || v === undefined ? '' : String(v).trim();
     out[f] = v;
   });

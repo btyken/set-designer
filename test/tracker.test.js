@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, shootLines, shootTotals, groupShoots, memberQuotas, checkReport, isDriveFolder } from '../public/shoot-dashboard/tracker.js';
+import { mondayOf, addDays, weekLabel, streamOf, remaining, weekTotals, shootLines, shootTotals, groupShoots, memberQuotas, checkReport, withFileCounts, isDriveFolder } from '../public/shoot-dashboard/tracker.js';
 
 test('weeks run Monday to Sunday', () => {
   assert.equal(mondayOf(new Date(2026, 10, 17)), '2026-11-16'); // Tuesday
@@ -108,4 +108,13 @@ test('quotas are captured against planned, per person, with carried-over work', 
   assert.deepEqual([q.Maye.quota, q.Maye.captured, q.Maye.need, q.Maye.carried], [105, 20, 85, 0]);
   assert.deepEqual([q.Abe.quota, q.Abe.captured, q.Abe.need, q.Abe.carried], [120, 60, 65, 65]);
   assert.deepEqual(memberQuotas(rows, open).map((m) => m.member), ['Maye', 'Abe']);
+});
+
+test('captured comes from the tracker file count when there is one', () => {
+  const data = withFileCounts({
+    rows: [{ captured: 75, logged: 77 }, { captured: 20, logged: 0 }, { captured: null, logged: null }, { captured: 5 }],
+    openRows: [{ captured: null, logged: 12 }],
+  });
+  assert.deepEqual(data.rows.map((r) => r.captured), [77, 20, null, 5]);
+  assert.equal(data.openRows[0].captured, 12);
 });
