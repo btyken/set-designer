@@ -179,7 +179,7 @@ function openClip(clip) {
   let url = '';
   let reason = '';
   let busy = false;
-  const stage = h('div', { class: 'qc-stage' }, h('p', { class: 'qc-wait' }, 'Getting the clip… 0%'));
+  const stage = h('div', { class: 'qc-stage' });
   const msg = h('p', { class: 'error', role: 'alert' });
   const reasons = h('div', { class: 'qc-reasons', hidden: true });
   const other = h('input', { type: 'text', placeholder: 'Or say what is wrong', maxLength: 200, oninput: (e) => { reason = e.target.value.trim(); paint(); } });
@@ -248,16 +248,24 @@ function openClip(clip) {
   document.documentElement.classList.add('locked');
   state.open = clip;
 
-  fetchClip(clip, (p) => { stage.firstChild.textContent = `Getting the clip… ${Math.round(p * 100)}%`; }, stop.signal).then((blob) => {
-    if (stop.signal.aborted) return;
-    url = URL.createObjectURL(blob);
-    const video = h('video', { src: url, controls: true, playsInline: true, autoplay: true, loop: true, muted: false });
-    video.addEventListener('error', () => {
-      stage.replaceChildren(h('p', { class: 'qc-wait' }, 'This browser cannot play this file here. Tap Open in Drive to watch it, then come back to mark it.'));
+  // Drive's own player starts at once (Drive has already prepared the video), so it is the default.
+  // "Play original file" fetches the exact file instead: slower, but it is what the participants get.
+  const playOriginal = () => {
+    stage.replaceChildren(h('p', { class: 'qc-wait' }, 'Getting the original file… 0%'));
+    fetchClip(clip, (p) => { stage.firstChild.textContent = `Getting the original file… ${Math.round(p * 100)}%`; }, stop.signal).then((blob) => {
+      if (stop.signal.aborted) return;
+      url = URL.createObjectURL(blob);
+      const video = h('video', { src: url, controls: true, playsInline: true, autoplay: true, loop: true, muted: false });
+      video.addEventListener('error', () => {
+        stage.replaceChildren(h('p', { class: 'qc-wait' }, 'This browser cannot play this file here. Tap Open in Drive to watch it, then come back to mark it.'));
+      });
+      stage.replaceChildren(video);
+      video.play().catch(() => { /* autoplay blocked: the controls are there */ });
+    }).catch((err) => {
+      if (!stop.signal.aborted) stage.replaceChildren(h('p', { class: 'qc-wait' }, `${err.message} Tap Open in Drive to watch it there.`));
     });
-    stage.replaceChildren(video);
-    video.play().catch(() => { /* autoplay blocked: the controls are there */ });
-  }).catch((err) => {
-    if (!stop.signal.aborted) stage.replaceChildren(h('p', { class: 'qc-wait' }, `${err.message} Tap Open in Drive to watch it there.`));
-  });
+  };
+  stage.replaceChildren(
+    h('iframe', { class: 'qc-frame', src: `https://drive.google.com/file/d/${encodeURIComponent(clip.id)}/preview`, allow: 'autoplay; fullscreen', title: clip.name }),
+    h('button', { class: 'btn small qc-orig', type: 'button', onclick: playOriginal }, 'Not playing? Play original file'));
 }
