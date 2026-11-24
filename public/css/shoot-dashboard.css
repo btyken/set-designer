@@ -240,3 +240,13 @@
 
 .counted { margin: 0; font-size: 14px; color: var(--muted); }
 .counted strong { font: 500 18px var(--mono); color: var(--ink); margin-right: 4px; }
+
+.qc-group { border-top: 1px solid var(--rule); }
+.qc-group summary { cursor: pointer; min-height: 56px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: center; padding: 8px 0; list-style: none; }
+.qc-group summary::-webkit-details-marker { display: none; }
+.qc-group summary strong { font-weight: 500; color: var(--ink); }
+.qc-group summary span { grid-column: 1; font-size: 13px; color: var(--muted); }
+.qc-group summary b { grid-column: 2; grid-row: 1 / span 2; font: 500 13px var(--mono); min-width: 32px; height: 32px; padding: 0 8px; border-radius: 99px; display: grid; place-items: center; background: var(--deep); color: var(--ink); }
+.qc-group[open] summary b { background: var(--ink); color: var(--paper); }
+.qc-group .qc-list { padding-bottom: 14px; }
+.qc-other { justify-self: end; }

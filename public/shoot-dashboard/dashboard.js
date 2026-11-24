@@ -47,6 +47,8 @@ function setView(view, filter) {
     // Quality check has its own sign-in, so it works before the tracker is connected.
     for (const b of document.querySelectorAll('#viewSwitch [data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
     $('qcView').hidden = view !== 'qc';
+    $('shootsView').hidden = view !== 'shoots';
+    $('boardView').hidden = view !== 'board';
     if (view !== 'qc') return renderConnect();
     $('shootConnect').hidden = true;
     return renderQc();

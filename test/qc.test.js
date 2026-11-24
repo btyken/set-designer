@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // qc.js only touches the page inside its render functions, so its helpers load in Node.
-const { clipName, sizeText } = await import('../public/shoot-dashboard/qc.js');
+const { clipName, sizeText, groupClips } = await import('../public/shoot-dashboard/qc.js');
 
 test('clip names follow TYPE_SHOOTER_PRODUCT_PART_DATE_VERSION', () => {
   assert.equal(clipName({ shooter: 'maye', product: 'AIOG', part: 'hook', date: new Date(2026, 8, 28), version: 1 }), 'BRS_MAYE_AIOG_HOOK_092826_V1');
@@ -34,4 +34,15 @@ test('arrow keys move between clips, Escape closes, typing is left alone', async
   assert.equal(key('a'), null);
   assert.equal(key('ArrowRight', { metaKey: true }), null);
   assert.equal(key('ArrowLeft', { target: { tagName: 'INPUT' } }), null);
+});
+
+test('waiting clips are grouped by shoot, newest first, with held clips on top', () => {
+  const groups = groupClips([
+    { id: 'a', shoot: 'SHOOT-0002', member: 'Maye', productName: '4EVER GLOW SET', shotOn: '2026-11-17' },
+    { id: 'b', shoot: 'SHOOT-0009', member: 'Luiz', shotOn: '2026-11-24' },
+    { id: 'c', name: 'dropped.mp4' },
+    { id: 'd', shoot: 'SHOOT-0002', member: 'Maye', shotOn: '2026-11-17' },
+  ]);
+  assert.deepEqual(groups.map((g) => [g.title, g.clips.map((c) => c.id)]), [['Not from a shoot', ['c']], ['SHOOT-0009', ['b']], ['SHOOT-0002', ['a', 'd']]]);
+  assert.equal(groups[2].sub, 'Maye · 4EVER GLOW SET · 2026-11-17');
 });

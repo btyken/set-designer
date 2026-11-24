@@ -31,9 +31,29 @@ export function viewerKey(e) {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return null;
   return { ArrowLeft: 'prev', ArrowRight: 'next', Escape: 'close' }[e.key] || null;
 }
+/**
+ * The waiting clips in checking order: clips held at the INBOX gate first, then one group per shoot,
+ * newest shoot first. Each group: { key, title, sub, clips }.
+ */
+export function groupClips(clips) {
+  const groups = new Map();
+  for (const c of clips) {
+    const key = c.shoot || '';
+    if (!groups.has(key)) {
+      groups.set(key, key
+        ? { key, title: key, sub: [c.member, c.productName || c.product, c.shotOn].filter(Boolean).join(' · '), day: c.shotOn || '', clips: [] }
+        : { key, title: 'Not from a shoot', sub: 'Dropped into INBOX or the QC folder', day: '9999', clips: [] });
+    }
+    groups.get(key).clips.push(c);
+  }
+  return [...groups.values()].sort((a, b) => (a.day === b.day ? a.title.localeCompare(b.title) : a.day < b.day ? 1 : -1));
+}
+
 export const sizeText = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`);
 
-const state = { code: '', name: '', clips: [], done: [], thumbs: {}, failedFolderSet: true, trackerUrl: '', trackerLinked: true, more: false, loading: false, error: '', open: null };
+const PART_KEY = 'sd-qc-part';
+const open = new Set(); // groups the checker has opened; the first group opens by itself
+const state = { lastPart: '', code: '', name: '', clips: [], done: [], thumbs: {}, failedFolderSet: true, trackerUrl: '', trackerLinked: true, more: false, loading: false, error: '', open: null };
 /** Called with the tracker sheet's link once it is known, so the dashboard can show Open tracker. */
 let onTracker = () => {};
 export const setTrackerListener = (fn) => { onTracker = fn; };
@@ -101,10 +121,14 @@ export async function renderQc() {
     state.error && h('p', { class: 'error', role: 'alert' }, state.error),
     !state.trackerLinked && !state.loading && h('p', { class: 'note warn' }, 'The B-Roll Tracker could not be read, so only clips in the QC folder are listed. The Reel Builder’s account needs view access to the tracker sheet.'),
     !state.failedFolderSet && h('p', { class: 'note warn' }, 'The Drive folder for failed clips has not been set yet. Until it is, failed clips wait in ASSET DISTRIBUTION › QC FAILED on the main Drive.'),
-    h('div', { class: 'qc-list' }, state.clips.map((c) => h('button', { class: 'qc-clip', type: 'button', onclick: () => openClip(c) },
-      h('span', { class: 'qc-thumb' }, state.thumbs[c.id] ? h('img', { src: state.thumbs[c.id], alt: '' }) : h('i', {}, '▶')),
-      h('strong', {}, c.name),
-      h('span', {}, [c.shoot, c.member || c.shotBy, c.product || c.productName, c.part, c.shotOn, c.needsPart ? 'pick the part when passing' : c.nameProblem ? 'name needs fixing' : '', c.size ? sizeText(c.size) : ''].filter(Boolean).join(' · '))))),
+    ...groupClips(state.clips).map((g) => h('details', { class: 'qc-group', open: open.has(g.key), ontoggle: (e) => {
+      if (e.target.open) { open.add(g.key); loadThumbs(g.clips); } else open.delete(g.key);
+    } },
+      h('summary', {}, h('strong', {}, g.title), h('span', {}, g.sub), h('b', {}, String(g.clips.length))),
+      h('div', { class: 'qc-list' }, g.clips.map((c) => h('button', { class: 'qc-clip', type: 'button', onclick: () => openClip(c) },
+        h('span', { class: 'qc-thumb' }, state.thumbs[c.id] ? h('img', { src: state.thumbs[c.id], alt: '' }) : h('i', {}, '▶')),
+        h('strong', {}, c.name),
+        h('span', {}, [c.part, c.needsPart ? 'pick the part when passing' : c.nameProblem ? 'name needs fixing' : '', c.size ? sizeText(c.size) : ''].filter(Boolean).join(' · ') || 'ready to check')))))),
     nameMaker(),
     state.done.length > 0 && h('h3', {}, 'Just checked'),
     h('ul', { class: 'list qc-done' }, state.done.map((d) => h('li', {},
@@ -140,17 +164,31 @@ async function load() {
   renderQc();
   try {
     const res = await call('qcList');
+    // kept in checking order, so "next clip" after a decision stays inside the same shoot
+    res.clips = groupClips(res.clips).flatMap((g) => g.clips);
     Object.assign(state, { clips: res.clips, done: res.done || [], more: !!res.more, failedFolderSet: res.failedFolderSet !== false, trackerUrl: res.trackerUrl || '', trackerLinked: res.trackerLinked !== false });
     if (state.trackerUrl) onTracker(state.trackerUrl);
   } catch (err) {
     state.error = err.message;
   }
   state.loading = false;
+  // the newest shoot starts open; the others open when tapped
+  const groups = groupClips(state.clips);
+  for (const key of [...open]) if (!groups.some((g) => g.key === key)) open.delete(key);
+  if (!open.size && groups.length) open.add(groups[0].key);
   renderQc();
   loadThumbs();
 }
-async function loadThumbs() {
-  const todo = state.clips.map((c) => c.id).filter((id) => !(id in state.thumbs));
+function rememberPart(p) {
+  state.lastPart = p;
+  try { localStorage.setItem(PART_KEY, p); } catch { /* remembered for this visit only */ }
+}
+try { state.lastPart = localStorage.getItem(PART_KEY) || ''; } catch { /* nothing remembered */ }
+
+/** Small pictures for one group's clips (the open groups by default), a dozen at a time. */
+async function loadThumbs(list) {
+  list ||= groupClips(state.clips).filter((g) => open.has(g.key)).flatMap((g) => g.clips);
+  const todo = list.map((c) => c.id).filter((id) => !(id in state.thumbs));
   for (let i = 0; i < todo.length; i += 12) {
     try {
       Object.assign(state.thumbs, (await call('qcThumbs', { ids: todo.slice(i, i + 12) })).thumbs);
@@ -207,13 +245,21 @@ function openClip(clip) {
   let part = '';
   const parts = h('div', { class: 'qc-reasons', hidden: true },
     h('p', { class: 'help' }, 'Where in a reel does this clip go?'),
-    h('div', { class: 'chiprow' }, PARTS.map((p) => h('button', { class: 'chipbtn', type: 'button', onclick: () => { part = p; decide('PASSED'); } }, p))));
-  const passBtn = h('button', { class: 'btn pass', type: 'button', onclick: () => {
-    if (!clip.needsPart) return decide('PASSED');
+    h('div', { class: 'chiprow' }, PARTS.map((p) => h('button', { class: 'chipbtn', type: 'button', onclick: () => { part = p; rememberPart(p); decide('PASSED'); } }, p))));
+  const showParts = () => {
     reasons.hidden = true;
     parts.hidden = false;
     parts.scrollIntoView({ block: 'nearest' });
-  } }, '✓ PASSED');
+  };
+  // Clips from one shoot are mostly the same part, so the last one picked is offered in one tap.
+  const quick = clip.needsPart && PARTS.includes(state.lastPart) ? state.lastPart : '';
+  const passBtn = h('button', { class: 'btn pass', type: 'button', onclick: () => {
+    if (!clip.needsPart) return decide('PASSED');
+    if (!quick) return showParts();
+    part = quick;
+    decide('PASSED');
+  } }, quick ? `✓ PASSED · ${quick}` : '✓ PASSED');
+  const otherPart = quick && h('button', { class: 'btn small qc-other', type: 'button', onclick: showParts }, `Not ${quick}? Pick another part`);
   const failBtn = h('button', { class: 'btn fail', type: 'button', onclick: () => { parts.hidden = true; reasons.hidden = false; reasons.scrollIntoView({ block: 'nearest' }); } }, '✕ FAILED');
   const prev = neighbour(state.clips, clip, -1);
   const next = neighbour(state.clips, clip, +1);
@@ -273,6 +319,7 @@ function openClip(clip) {
       h('p', { class: 'spec' }, [clip.shoot, clip.product || clip.productName, clip.part, (clip.member || clip.shotBy) && `shot by ${clip.member || clip.shotBy}`, clip.shotOn, clip.size ? sizeText(clip.size) : ''].filter(Boolean).join(' · ')),
       msg,
       h('div', { class: 'qc-buttons' }, failBtn, passBtn),
+      otherPart,
       parts,
       reasons));
   document.body.append(box);
