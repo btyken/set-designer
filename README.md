@@ -24,6 +24,7 @@ Props, products and designs are saved in each browser.
 - Earlier shoots that are still short of their planned clips (and not Completed or Paused) are carried into the current week under **Still open from earlier weeks**, and count in the quotas.
 - Each person's row shows captured / quota and QC-passed clips. **Report shots** writes Captured Clips, QC Passed Clips and Shoot Status into that person's SHOOT PLAN row. Video Stream can be picked right on the row; it is saved to column S.
 - The **Moodboard** page collects every inspo photo for the week in one Pinterest-style board, filterable by shoot. Drop or pick photos to add them to a shoot's board, or to General inspo when they are not for one shoot. Each shoot card also shows its own photos.
+- **Quality check** (third view): lists the clips in the tracker's RAW REVIEW tab that nobody has decided yet, plus any in the Reel Builder's `ASSET DISTRIBUTION / QC` folder. Each clip plays back in the page and is marked PASSED (a shortcut goes to the Reel Builder's INBOX, with the reel part the checker picks) or FAILED with a reason (a shortcut goes to the failed-clips folder). Results are written to RAW REVIEW (QC Result, QC Reason, Checked by) and SHOOT PLAN (QC Passed Clips). It talks to the Reel Builder's web app (`SD_API_URL` in `.env`) and needs a participant code with QC switched on, so it works even before the tracker is connected.
 - Photos live in Drive, one folder per shoot. A shoot folder's link goes into Moodboard / Reference Link when that cell is empty.
 
 ### Code layout
@@ -91,6 +92,6 @@ To point it at another sheet, set the script property `CATALOG_SHEET_ID`.
 
 ## Publish the static site
 
-    SD_PASSCODE='team passcode' SD_TRACKER_URL='https://script.google.com/macros/s/…/exec' npm run deploy
+    SD_PASSCODE='team passcode' SD_TRACKER_URL='https://script.google.com/macros/s/…/exec' SD_API_URL='https://script.google.com/macros/s/…/exec' npm run deploy
 
 This builds `dist/` and pushes it to the `gh-pages` branch. The passcode gate runs in the browser and only keeps casual visitors out. Without `SD_TRACKER_URL`, each person pastes the tracker link once on the Shoot Dashboard. `SD_PASS_HASH` can stand in for `SD_PASSCODE` to keep the passcode already published.

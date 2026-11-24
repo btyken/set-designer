@@ -29,6 +29,9 @@ const config = passHash ? { passHash } : {};
 // The B-roll tracker web app (see apps-script/). Without it, each person pastes the link once in Shoots.
 const trackerUrl = (process.env.SD_TRACKER_URL || '').trim();
 if (trackerUrl) config.trackerUrl = trackerUrl;
+// The Reel Builder's web app, which the Quality check view talks to. Kept in .env, not in the repo.
+const api = (process.env.SD_API_URL || '').trim();
+if (api) config.api = api;
 fs.writeFileSync(path.join(dist, 'config.js'), `window.SD_CONFIG = ${JSON.stringify(config)};\n`);
 fs.writeFileSync(path.join(dist, '.nojekyll'), '');
 console.log(`Built ${dist}${passHash ? ' with a passcode gate' : ' with no passcode'}${trackerUrl ? ', linked to the B-roll tracker' : ', no tracker link'}`);

@@ -7,6 +7,12 @@ import {
   weekTotals, shootTotals, groupShoots, memberQuotas, checkReport,
 } from './tracker.js';
 
+import { renderQc, setTrackerListener } from './qc.js';
+
+const SHEET_KEY = 'sd-tracker-sheet'; // the tracker's link, remembered so Open tracker shows even when a week fails to load
+const savedSheet = () => { try { return localStorage.getItem(SHEET_KEY) || ''; } catch { return ''; } };
+const saveSheet = (url) => { try { if (url) localStorage.setItem(SHEET_KEY, url); } catch { /* not remembered */ } };
+
 const GENERAL = 'GENERAL'; // the moodboard that is not tied to one shoot
 
 const S = {
@@ -31,12 +37,22 @@ export function initDashboard({ openLightbox }) {
   $('wkNow').addEventListener('click', () => setWeek(mondayOf()));
   $('wkRefresh').addEventListener('click', () => load(true));
   for (const b of document.querySelectorAll('#viewSwitch [data-view]')) b.addEventListener('click', () => setView(b.dataset.view));
+  setTrackerListener((url) => { if (!savedSheet()) { saveSheet(url); render(); } });
 }
 
 function setView(view, filter) {
   S.view = view;
   if (filter) S.filter = filter;
+  if (!tracker.ready) {
+    // Quality check has its own sign-in, so it works before the tracker is connected.
+    for (const b of document.querySelectorAll('#viewSwitch [data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
+    $('qcView').hidden = view !== 'qc';
+    if (view !== 'qc') return renderConnect();
+    $('shootConnect').hidden = true;
+    return renderQc();
+  }
   render();
+  if (view === 'qc') renderQc();
   if (view === 'board') window.scrollTo(0, 0);
 }
 
@@ -44,7 +60,7 @@ function setView(view, filter) {
 export const canPin = () => tracker.ready;
 
 export function showDashboard() {
-  if (!tracker.ready) return renderConnect();
+  if (!tracker.ready) return setView(S.view);
   $('shootConnect').hidden = true;
   document.querySelector('.wk-nav').hidden = false;
   $('viewSwitch').hidden = false;
@@ -131,7 +147,7 @@ function renderConnect(error = '') {
   $('shootConnect').replaceChildren(form);
   $('shootConnect').hidden = false;
   document.querySelector('.wk-nav').hidden = true;
-  $('viewSwitch').hidden = true;
+  $('viewSwitch').hidden = false;
 }
 
 // ---------- Main view ----------
@@ -143,18 +159,24 @@ function render() {
   $('wkTitle').textContent = S.week === now ? "This week's shoots." : S.week === addDays(now, 7) ? "Next week's shoots." : S.week === addDays(now, -7) ? "Last week's shoots." : `Shoots, ${weekLabel(S.week)}.`;
   $('wkNow').setAttribute('aria-pressed', String(S.week === now));
   $('wkRefresh').disabled = S.loading;
-  $('wkSheet').hidden = !data?.sheetUrl;
-  if (data?.sheetUrl) $('wkSheet').href = data.sheetUrl;
+  if (data?.sheetUrl) saveSheet(data.sheetUrl);
+  const sheetUrl = data?.sheetUrl || savedSheet();
+  $('wkSheet').hidden = !sheetUrl;
+  if (sheetUrl) $('wkSheet').href = sheetUrl;
   $('shootMsg').textContent = S.message?.text || '';
+  $('shootMsg').hidden = S.view === 'qc';
+  $('qcView').hidden = S.view !== 'qc';
   $('shootMsg').className = 'shoot-msg' + (S.message?.error ? ' error' : '');
   for (const b of document.querySelectorAll('#viewSwitch [data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === S.view));
   $('shootsView').hidden = S.view !== 'shoots';
   $('boardView').hidden = S.view !== 'board';
   if (!data) {
+    if (S.view === 'qc') return;
     for (const id of ['shootTargets', 'shootQuotas', 'shootList', 'boardView']) $(id).replaceChildren();
     $('shootUnassigned').hidden = true;
     return;
   }
+  if (S.view === 'qc') return;
   if (S.view === 'board') return renderBoard(data);
   renderTargets(data);
   renderQuotas(data);
