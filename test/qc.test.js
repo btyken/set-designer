@@ -14,3 +14,24 @@ test('sizes read in MB and GB', () => {
   assert.equal(sizeText(12_400_000), '12 MB');
   assert.equal(sizeText(2_300_000_000), '2.3 GB');
 });
+
+test('back and next step along the waiting list and stop at the ends', async () => {
+  const { neighbour } = await import('../public/shoot-dashboard/qc.js');
+  const [a, b, c] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  assert.equal(neighbour([a, b, c], b, -1), a);
+  assert.equal(neighbour([a, b, c], b, +1), c);
+  assert.equal(neighbour([a, b, c], a, -1), null);
+  assert.equal(neighbour([a, b, c], c, +1), null);
+  assert.equal(neighbour([a, c], b, +1), null);
+});
+
+test('arrow keys move between clips, Escape closes, typing is left alone', async () => {
+  const { viewerKey } = await import('../public/shoot-dashboard/qc.js');
+  const key = (k, extra = {}) => viewerKey({ key: k, target: { tagName: 'BODY' }, ...extra });
+  assert.equal(key('ArrowLeft'), 'prev');
+  assert.equal(key('ArrowRight'), 'next');
+  assert.equal(key('Escape'), 'close');
+  assert.equal(key('a'), null);
+  assert.equal(key('ArrowRight', { metaKey: true }), null);
+  assert.equal(key('ArrowLeft', { target: { tagName: 'INPUT' } }), null);
+});

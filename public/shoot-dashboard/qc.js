@@ -19,6 +19,18 @@ export function clipName({ type = 'BRS', shooter = '', product = '', part = '', 
   const mmddyy = [d.getMonth() + 1, d.getDate(), d.getFullYear() % 100].map((n) => String(n).padStart(2, '0')).join('');
   return [letters(type) || 'BRS', letters(shooter) || 'NAME', letters(product), letters(part), mmddyy, `V${Math.max(1, Number(version) || 1)}`].join('_');
 }
+/** The clip `step` places along the waiting list (−1 back, +1 next), or null at either end. */
+export function neighbour(clips, clip, step) {
+  const i = clips.indexOf(clip);
+  return i < 0 ? null : clips[i + step] || null;
+}
+/** What a key press does in the clip viewer: 'prev', 'next', 'close' or null. Typing in a box is left alone. */
+export function viewerKey(e) {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return null;
+  const tag = e.target?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return null;
+  return { ArrowLeft: 'prev', ArrowRight: 'next', Escape: 'close' }[e.key] || null;
+}
 export const sizeText = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`);
 
 const state = { code: '', name: '', clips: [], done: [], thumbs: {}, failedFolderSet: true, trackerUrl: '', trackerLinked: true, more: false, loading: false, error: '', open: null };
@@ -203,7 +215,22 @@ function openClip(clip) {
     parts.scrollIntoView({ block: 'nearest' });
   } }, '✓ PASSED');
   const failBtn = h('button', { class: 'btn fail', type: 'button', onclick: () => { parts.hidden = true; reasons.hidden = false; reasons.scrollIntoView({ block: 'nearest' }); } }, '✕ FAILED');
+  const prev = neighbour(state.clips, clip, -1);
+  const next = neighbour(state.clips, clip, +1);
+  const go = (to) => {
+    if (!to || busy) return;
+    close();
+    openClip(to);
+  };
+  const onKey = (e) => {
+    const k = viewerKey(e);
+    if (!k) return;
+    e.preventDefault();
+    if (k === 'close') close();
+    else go(k === 'prev' ? prev : next);
+  };
   const close = () => {
+    document.removeEventListener('keydown', onKey);
     stop.abort();
     if (url) URL.revokeObjectURL(url);
     box.remove();
@@ -233,8 +260,12 @@ function openClip(clip) {
   }
   const box = h('div', { class: 'overlay qc-player', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Check ${clip.name}` },
     h('div', { class: 'measure-top' },
-      h('button', { class: 'btn small', type: 'button', onclick: close }, 'Back'),
+      h('button', { class: 'btn small', type: 'button', onclick: close }, 'Close'),
       h('span', { class: 'qc-name' }, clip.name),
+      h('div', { class: 'qc-nav' },
+        h('button', { class: 'btn small', type: 'button', disabled: !prev, onclick: () => go(prev), 'aria-label': 'Previous clip', title: 'Previous clip (←)' }, '‹ Back'),
+        h('span', { class: 'qc-pos' }, `${state.clips.indexOf(clip) + 1} of ${state.clips.length}${state.more ? '+' : ''}`),
+        h('button', { class: 'btn small', type: 'button', disabled: !next, onclick: () => go(next), 'aria-label': 'Next clip', title: 'Next clip (→)' }, 'Next ›')),
       h('a', { class: 'btn small', href: `https://drive.google.com/file/d/${encodeURIComponent(clip.id)}/view`, target: '_blank', rel: 'noopener' }, 'Open in Drive')),
     stage,
     h('div', { class: 'qc-actions' },
@@ -245,6 +276,7 @@ function openClip(clip) {
       parts,
       reasons));
   document.body.append(box);
+  document.addEventListener('keydown', onKey);
   document.documentElement.classList.add('locked');
   state.open = clip;
 
