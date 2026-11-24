@@ -58,7 +58,7 @@ h3 { font: 500 12px var(--sans); text-transform: uppercase; letter-spacing: 0.06
 .top { padding-top: env(safe-area-inset-top); position: sticky; top: 0; z-index: 5; background: rgb(248 244 241 / .92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
 .top-in { max-width: 1240px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 16px; }
 .brand { font: 600 15px var(--sans); color: var(--ink); display: flex; align-items: center; gap: 10px; white-space: nowrap; text-decoration: none; }
-.brand img { width: 36px; height: 36px; object-fit: contain; flex: none; }
+.brand img { height: 30px; width: auto; flex: none; }
 .home-back { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; color: var(--ink); text-decoration: none; flex: none; border: 1px solid var(--rule-strong); background: var(--raised); }
 .home-back:hover { border-color: var(--accent); color: var(--accent); }
 .home-back svg { width: 18px; height: 18px; }
